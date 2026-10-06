@@ -34,7 +34,7 @@ class AppContext:
         with self._lock:
             if self._funpay is None:
                 from ..sources.funpay import FunPaySource
-                self._funpay = FunPaySource(self.settings.funpay)
+                self._funpay = FunPaySource(self.settings.funpay, storage=self.storage)
             return self._funpay
 
     @property
