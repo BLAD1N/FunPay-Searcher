@@ -7,7 +7,9 @@
 - GET ``/users/{id}/`` — страница продавца;
 - GET ``/lots/offerEdit?node=N[&offer=M]`` (XHR, JSON ``{"html": ...}``) — форма лота;
 - POST ``/lots/offerSave`` — создание/редактирование лота;
-- GET ``/lots/{id}/trade`` — наши предложения в подкатегории.
+- GET ``/lots/{id}/trade`` — наши предложения в подкатегории;
+- GET/POST ``/orders/trade`` — наши продажи (следующие страницы — POST с ``continue``);
+- POST ``/lots/raise`` — поднятие лотов категории.
 
 Разметка FunPay описана в докстрингах соответствующих методов; каждый ``find`` защищён —
 при неожиданной вёрстке выбрасывается :class:`SourceError` с понятным сообщением.
@@ -19,6 +21,7 @@ import logging
 import re
 import threading
 import time
+from datetime import datetime, timedelta
 from typing import Any, Optional
 from urllib.parse import parse_qs, urljoin, urlparse
 
@@ -221,6 +224,65 @@ def parse_lot_form_html(html: str) -> dict:
             schema.append({"name": name, "type": "select", "label": label, "value": selected,
                            "options": options, "required": required})
     return {"fields": fields, "schema": schema}
+
+
+MONTHS_RU = {
+    "января": 1, "февраля": 2, "марта": 3, "апреля": 4, "мая": 5, "июня": 6,
+    "июля": 7, "августа": 8, "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
+}
+_DATE_RE = re.compile(
+    r"^(?:(?P<rel>сегодня|вчера)|(?P<day>\d{1,2}) (?P<month>[а-яё]+)(?: (?P<year>\d{4}))?)"
+    r",? (?P<hour>\d{1,2}):(?P<minute>\d{2})$"
+)
+_WAIT_RE = re.compile(r"(\d+)\s*(час|мин|сек)")
+
+
+def parse_funpay_date(text: Optional[str], now: Optional[datetime] = None) -> Optional[datetime]:
+    """Дата заказа FunPay -> datetime (None, если формат не распознан).
+
+    Поддерживаются «сегодня, 14:05», «вчера, 09:10», «12 марта, 10:00», «12 марта 2025, 10:00».
+    ``now`` задаёт точку отсчёта (и tzinfo результата); по умолчанию — локальное время.
+    """
+    if not text:
+        return None
+    now = now or datetime.now()
+    m = _DATE_RE.match(_norm(text))
+    if not m:
+        return None
+    try:
+        hour, minute = int(m.group("hour")), int(m.group("minute"))
+        if m.group("rel"):
+            base = now if m.group("rel") == "сегодня" else now - timedelta(days=1)
+            return base.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        month = MONTHS_RU.get(m.group("month"))
+        if not month:
+            return None
+        year = int(m.group("year")) if m.group("year") else now.year
+        return datetime(year, month, int(m.group("day")), hour, minute, tzinfo=now.tzinfo)
+    except (ValueError, TypeError):
+        return None
+
+
+def parse_wait_time(text: Optional[str]) -> Optional[int]:
+    """«Подождите 3 часа 15 минут» -> 11700 сек; «Подождите час.» -> 3600; None — время не найдено."""
+    if not text:
+        return None
+    t = _norm(text)
+    total = 0
+    found = False
+    for num, unit in _WAIT_RE.findall(t):
+        found = True
+        total += int(num) * (3600 if unit == "час" else 60 if unit == "мин" else 1)
+    if found:
+        return total
+    # формы без числа: «Подождите час.», «Подождите минуту.», «Подождите секунду.»
+    if "час" in t:
+        return 3600
+    if "минут" in t:
+        return 60
+    if "секунд" in t:
+        return 1
+    return None
 
 
 def _checkbox_key(keys, base: str) -> str:
@@ -1037,6 +1099,153 @@ class FunPaySource(BaseSource):
         используйте :meth:`set_lot_active` (деактивация).
         """
         return self.update_lot(lot_id, subcategory_id, deleted="1")
+
+    # ------------------------------------------------------------------ продажи
+    def _parse_order_item(self, a: Tag, now: datetime) -> Optional[dict]:
+        """Виджет заказа ``a.tc-item`` со страницы /orders/trade."""
+        classes = a.get("class") or []
+        if "warning" in classes:
+            status = "refunded"
+        elif "info" in classes:
+            status = "paid"
+        else:
+            status = "closed"
+        order_id = _text(a.select_one(".tc-order")).lstrip("#").strip()
+        if not order_id:
+            m = re.search(r"/orders/([A-Za-z0-9]+)", a.get("href") or "")
+            order_id = m.group(1) if m else ""
+        if not order_id:
+            self.log.debug("FunPay: заказ без id, пропускаем")
+            return None
+        title = ""
+        subcategory_name = None
+        desc = a.select_one(".order-desc")
+        if desc is not None:
+            subcategory_name = _text(desc.select_one(".text-muted")) or None
+            for child in desc.find_all("div", recursive=False):
+                if "text-muted" in (child.get("class") or []):
+                    continue
+                title = _text(child)
+                break
+            if not title:
+                title = _text(desc)
+        buyer = self._parse_seller(a.select_one(".tc-user"))
+        price_text = _text(a.select_one(".tc-price"))
+        price = price_from_text(price_text)
+        if price is None:
+            self.log.warning("FunPay: у заказа %s не удалось определить сумму", order_id)
+            price = 0.0
+        return {
+            "order_id": order_id,
+            "status": status,
+            "title": title,
+            "subcategory_name": subcategory_name,
+            "price": price,
+            "currency": currency_from_text(price_text),
+            "buyer_name": buyer["name"],
+            "buyer_id": buyer["id"],
+            "buyer_url": buyer["url"],
+            "order_url": f"{BASE_URL}/orders/{order_id}/",
+            "date": parse_funpay_date(_text(a.select_one(".tc-date-time")), now),
+        }
+
+    def get_sales(self, include_paid: bool = True, include_closed: bool = True, include_refunded: bool = True,
+                  max_pages: int = 1) -> list[dict]:
+        """Наши продажи со страницы ``/orders/trade`` (первая страница — GET, следующие — POST ``continue=...``).
+
+        Статус: класс ``info`` — оплачен (paid), ``warning`` — возврат (refunded), иначе — закрыт (closed).
+        Страница входа (``div.content-account-login``) означает невалидный golden_key -> AuthError.
+        """
+        if not (self.settings.golden_key or "").strip():
+            raise AuthError("golden_key не задан — укажите cookie golden_key в настройках")
+        wanted = {"paid": include_paid, "closed": include_closed, "refunded": include_refunded}
+        now = datetime.now()
+        result: list[dict] = []
+        seen: set[str] = set()
+        cont: Optional[str] = None
+        for page in range(max(1, int(max_pages))):
+            if page == 0:
+                response = self._request("GET", "/orders/trade")
+            else:
+                response = self._request("POST", "/orders/trade", data={"continue": cont},
+                                         headers={"content-type": "application/x-www-form-urlencoded; charset=UTF-8"})
+            if 300 <= response.status_code < 400:
+                raise SourceError(f"FunPay перенаправил /orders/trade на {response.headers.get('location')} "
+                                  "— вероятно, golden_key истёк")
+            if response.status_code != 200:
+                raise SourceError(f"FunPay вернул {response.status_code} для /orders/trade")
+            soup = self._soup(response.text)
+            if soup.select_one(".content-account-login") is not None:
+                raise AuthError("golden_key невалиден или истёк")
+            items = soup.select("a.tc-item")
+            if not items and soup.select_one(".user-link-name") is None:
+                raise AuthError("golden_key невалиден или истёк")
+            for a in items:
+                order = self._parse_order_item(a, now)
+                if order is None or not wanted.get(order["status"]) or order["order_id"] in seen:
+                    continue
+                seen.add(order["order_id"])
+                result.append(order)
+            cont_el = soup.select_one("input[name=continue]")
+            cont = (cont_el.get("value") or "").strip() if cont_el is not None else ""
+            if not items or not cont:
+                break
+        self.log.info("FunPay: загружено продаж: %d", len(result))
+        return result
+
+    # ------------------------------------------------------------------ поднятие лотов
+    def category_of_subcategory(self, subcategory_id: int) -> Optional[int]:
+        """ID категории (игры), к которой относится подкатегория (по кэшу категорий)."""
+        try:
+            sid = int(subcategory_id)
+        except (TypeError, ValueError):
+            return None
+        fallback = None
+        for cat in self.categories():
+            for sub in cat.get("subcategories") or []:
+                if sub.get("id") != sid:
+                    continue
+                if sub.get("type") == "common":
+                    return cat["id"]
+                fallback = fallback if fallback is not None else cat["id"]
+        return fallback
+
+    def raise_lots(self, category_id: int, subcategory_ids: Optional[list[int]] = None) -> dict:
+        """Поднять лоты категории: POST ``/lots/raise`` (game_id, node_id, node_ids[]).
+
+        Возвращает ``{"ok": bool, "message": str, "wait_seconds": int|None}``; при «Подождите ...»
+        ``wait_seconds`` — сколько ждать до следующего поднятия.
+        """
+        self.ensure()
+        cat_id = int(category_id)
+        if subcategory_ids is None:
+            cat = next((c for c in self.categories() if c.get("id") == cat_id), None)
+            if cat is None:
+                raise SourceError(f"FunPay: категория {category_id} не найдена")
+            ids = [s["id"] for s in cat.get("subcategories") or [] if s.get("type") == "common"]
+        else:
+            ids = [int(i) for i in subcategory_ids]
+        if not ids:
+            raise SourceError(f"FunPay: в категории {category_id} нет подкатегорий для поднятия")
+        payload = {"game_id": cat_id, "node_id": ids[0], "node_ids[]": ids}
+        response = self._request("POST", "/lots/raise", data=payload, ajax=True,
+                                 headers={"content-type": "application/x-www-form-urlencoded; charset=UTF-8"})
+        if response.status_code != 200:
+            raise SourceError(f"FunPay вернул {response.status_code} при поднятии лотов")
+        try:
+            data = response.json()
+        except ValueError:
+            raise SourceError("FunPay вернул не JSON при поднятии лотов — возможно, golden_key истёк") from None
+        if not isinstance(data, dict):
+            raise SourceError("FunPay вернул неожиданный ответ при поднятии лотов")
+        msg = str(data.get("msg") or "")
+        if not data.get("error"):
+            self._event(f"FunPay: лоты категории {cat_id} подняты ({msg or 'ok'})", "info",
+                        {"category_id": cat_id, "subcategory_ids": ids})
+            return {"ok": True, "message": msg, "wait_seconds": None}
+        wait = parse_wait_time(msg) if "подожд" in msg.lower() else None
+        self.log.info("FunPay: поднятие лотов категории %s отклонено: %s (ждать %s сек)", cat_id, msg, wait)
+        return {"ok": False, "message": msg, "wait_seconds": wait}
 
     def get_balance(self) -> Optional[dict]:
         """Баланс не реализован (требует страницы лота с формой оплаты)."""

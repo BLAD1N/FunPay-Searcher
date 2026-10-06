@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qs
 
@@ -14,7 +15,9 @@ from app.sources.base import AuthError, SourceError
 from app.sources.funpay import (
     FunPaySource,
     currency_from_text,
+    parse_funpay_date,
     parse_lot_form_html,
+    parse_wait_time,
     price_from_text,
 )
 
@@ -36,6 +39,7 @@ class FakeFunPay:
         self.forbidden = False
         self.save_response: dict | str = {"done": True, "error": None, "url": "https://funpay.com/lots/148/trade"}
         self.save_status = 200
+        self.raise_response: dict | str = json.loads(load("raise_ok.json"))
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -89,6 +93,19 @@ class FakeFunPay:
             return httpx.Response(self.save_status, json=self.save_response)
         if path == "/users/5001/":
             return httpx.Response(200, text=load("user_page.html"))
+        if path == "/orders/trade":
+            if self.logged_out:
+                return httpx.Response(200, text=load("orders_trade_login.html"))
+            if request.method == "GET":
+                return httpx.Response(200, text=load("orders_trade.html"))
+            body = parse_qs(request.content.decode("utf-8"))
+            if body.get("continue") == ["ORDER0003"]:
+                return httpx.Response(200, text=load("orders_trade_page2.html"))
+            return httpx.Response(404, text="bad continue")
+        if path == "/lots/raise":
+            if isinstance(self.raise_response, str):
+                return httpx.Response(200, text=self.raise_response)
+            return httpx.Response(200, json=self.raise_response)
         return httpx.Response(404, text="<html><body>Страница не найдена</body></html>")
 
     def posted(self, path: str) -> dict[str, str]:
@@ -606,3 +623,165 @@ def test_storage_events(fake: FakeFunPay):
     source.create_lot(148, "WoT | 15 топов, Об. 279(р) | RU", price=28990)
     assert store.events and store.events[-1][0] == "funpay"
     assert "9001" in store.events[-1][2]
+
+
+# ----------------------------------------------------------------------------- даты / время ожидания
+def test_parse_funpay_date():
+    now = datetime(2026, 10, 6, 15, 30, 45)
+    assert parse_funpay_date("сегодня, 14:05", now) == datetime(2026, 10, 6, 14, 5)
+    assert parse_funpay_date("вчера, 09:10", now) == datetime(2026, 10, 5, 9, 10)
+    assert parse_funpay_date("12 марта, 10:00", now) == datetime(2026, 3, 12, 10, 0)
+    assert parse_funpay_date("12 марта 2025, 10:00", now) == datetime(2025, 3, 12, 10, 0)
+    assert parse_funpay_date("1 января 2024, 0:05", now) == datetime(2024, 1, 1, 0, 5)
+    assert parse_funpay_date("  Сегодня,\u00a014:05 ", now) == datetime(2026, 10, 6, 14, 5)
+    # перенос через месяц/год для «вчера»
+    assert parse_funpay_date("вчера, 23:59", datetime(2026, 1, 1, 0, 10)) == datetime(2025, 12, 31, 23, 59)
+    # tzinfo берётся из now
+    aware = datetime(2026, 10, 6, 15, 30, tzinfo=timezone.utc)
+    assert parse_funpay_date("12 марта, 10:00", aware) == datetime(2026, 3, 12, 10, 0, tzinfo=timezone.utc)
+    assert parse_funpay_date("вчера, 09:10", aware) == aware - timedelta(days=1, hours=6, minutes=20)
+    # мусор
+    assert parse_funpay_date("", now) is None
+    assert parse_funpay_date(None, now) is None
+    assert parse_funpay_date("12 мартобря, 10:00", now) is None
+    assert parse_funpay_date("31 февраля, 10:00", now) is None
+    assert parse_funpay_date("5 минут назад", now) is None
+    assert parse_funpay_date("сегодня", now) is None
+    # now по умолчанию — текущее время
+    assert parse_funpay_date("сегодня, 00:01").date() == datetime.now().date()
+
+
+def test_parse_wait_time():
+    assert parse_wait_time("Подождите 3 часа 15 минут") == 3 * 3600 + 15 * 60
+    assert parse_wait_time("Подождите 25 минут") == 25 * 60
+    assert parse_wait_time("Подождите 1 час") == 3600
+    assert parse_wait_time("Подождите 2 часа") == 7200
+    assert parse_wait_time("Подождите 5 часов 1 минуту 30 секунд") == 5 * 3600 + 60 + 30
+    assert parse_wait_time("Подождите 45 секунд.") == 45
+    assert parse_wait_time("Подождите час.") == 3600
+    assert parse_wait_time("Подождите минуту.") == 60
+    assert parse_wait_time("Подождите секунду.") == 1
+    assert parse_wait_time("Предложения подняты") is None
+    assert parse_wait_time("") is None
+    assert parse_wait_time(None) is None
+
+
+# ----------------------------------------------------------------------------- продажи
+def test_get_sales(src: FunPaySource, fake: FakeFunPay):
+    sales = src.get_sales()
+    assert [(r.method, r.url.path) for r in fake.requests] == [("GET", "/orders/trade")]
+    assert [s["order_id"] for s in sales] == ["ORDER0001", "ORDER0002", "ORDER0003"]
+    assert [s["status"] for s in sales] == ["paid", "closed", "refunded"]
+
+    today = datetime.now().date()
+    first = sales[0]
+    assert first == {
+        "order_id": "ORDER0001",
+        "status": "paid",
+        "title": "WoT | 15 топов, Об. 279(р) | RU",
+        "subcategory_name": "World of Tanks, Аккаунты",
+        "price": 28990.0,
+        "currency": "RUB",
+        "buyer_name": "Buyer_One",
+        "buyer_id": "6001",
+        "buyer_url": "https://funpay.com/users/6001/",
+        "order_url": "https://funpay.com/orders/ORDER0001/",
+        "date": datetime(today.year, today.month, today.day, 14, 5),
+    }
+    second = sales[1]
+    assert second["buyer_name"] == "second_buyer"
+    assert second["buyer_id"] == "6002"
+    assert second["price"] == 15990.0
+    assert second["date"] == datetime.combine(today - timedelta(days=1), datetime.min.time()).replace(hour=9, minute=10)
+    third = sales[2]
+    assert third["title"] == "Dota 2, 5000 MMR"
+    assert third["subcategory_name"] == "Dota 2, Аккаунты"
+    assert third["price"] == 45.0
+    assert third["currency"] == "USD"
+    assert third["buyer_name"] == "refund_guy"          # покупатель как a[href]
+    assert third["buyer_id"] == "6003"
+    assert third["date"] == datetime(2025, 3, 12, 10, 0)
+    assert set(first) == {"order_id", "status", "title", "subcategory_name", "price", "currency",
+                          "buyer_name", "buyer_id", "buyer_url", "order_url", "date"}
+
+
+def test_get_sales_filters(src: FunPaySource):
+    assert [s["order_id"] for s in src.get_sales(include_closed=False)] == ["ORDER0001", "ORDER0003"]
+    assert [s["order_id"] for s in src.get_sales(include_paid=False, include_refunded=False)] == ["ORDER0002"]
+    assert src.get_sales(include_paid=False, include_closed=False, include_refunded=False) == []
+
+
+def test_get_sales_pagination(src: FunPaySource, fake: FakeFunPay):
+    sales = src.get_sales(max_pages=3)
+    reqs = [(r.method, r.url.path) for r in fake.requests]
+    # вторая страница — POST c continue=<значение input[name=continue]>; третьей нет (на 2-й странице нет continue)
+    assert reqs == [("GET", "/orders/trade"), ("POST", "/orders/trade")]
+    post = fake.requests[1]
+    assert parse_qs(post.content.decode("utf-8")) == {"continue": ["ORDER0003"]}
+    assert post.headers["content-type"].startswith("application/x-www-form-urlencoded")
+    assert "golden_key=goldenkey-test" in post.headers["cookie"]
+    # ORDER0003 повторяется на второй странице — дедупликация
+    assert [s["order_id"] for s in sales] == ["ORDER0001", "ORDER0002", "ORDER0003", "ORDER0004"]
+    year = datetime.now().year
+    assert sales[3]["date"] == datetime(year, 3, 12, 10, 0)
+    assert sales[3]["buyer_name"] == "old_buyer"
+
+
+def test_get_sales_auth(src: FunPaySource, fake: FakeFunPay):
+    fake.logged_out = True
+    with pytest.raises(AuthError, match="golden_key невалиден или истёк"):
+        src.get_sales()
+    source = FunPaySource(FunPaySettings(golden_key="", request_delay=0), transport=httpx.MockTransport(fake.handler))
+    with pytest.raises(AuthError):
+        source.get_sales()
+
+
+# ----------------------------------------------------------------------------- поднятие лотов
+def test_raise_lots_ok(src: FunPaySource, fake: FakeFunPay):
+    result = src.raise_lots(4)
+    assert result == {"ok": True, "message": "Предложения подняты", "wait_seconds": None}
+    post = next(r for r in fake.requests if r.url.path == "/lots/raise")
+    assert post.method == "POST"
+    assert post.headers["x-requested-with"] == "XMLHttpRequest"
+    assert post.headers["accept"] == "*/*"
+    assert post.headers["content-type"].startswith("application/x-www-form-urlencoded")
+    # все «обычные» подкатегории игры (chips/2 исключён), node_id — первая из них
+    assert parse_qs(post.content.decode("utf-8")) == {"game_id": ["4"], "node_id": ["148"], "node_ids[]": ["148", "149"]}
+
+
+def test_raise_lots_explicit_subcategories(src: FunPaySource, fake: FakeFunPay):
+    src.raise_lots(4, [149, 148])
+    post = next(r for r in fake.requests if r.url.path == "/lots/raise")
+    assert parse_qs(post.content.decode("utf-8")) == {"game_id": ["4"], "node_id": ["149"], "node_ids[]": ["149", "148"]}
+
+
+def test_raise_lots_wait(src: FunPaySource, fake: FakeFunPay):
+    fake.raise_response = json.loads(load("raise_wait.json"))
+    assert src.raise_lots(4) == {"ok": False, "message": "Подождите 3 часа 15 минут", "wait_seconds": 11700}
+    fake.raise_response = {"error": True, "msg": "Подождите 25 минут"}
+    assert src.raise_lots(4)["wait_seconds"] == 1500
+    fake.raise_response = {"error": True, "msg": "Подождите 1 час"}
+    assert src.raise_lots(4)["wait_seconds"] == 3600
+    fake.raise_response = {"error": True, "msg": "Что-то пошло не так"}
+    assert src.raise_lots(4) == {"ok": False, "message": "Что-то пошло не так", "wait_seconds": None}
+    fake.raise_response = "<html>login</html>"
+    with pytest.raises(SourceError, match="не JSON"):
+        src.raise_lots(4)
+
+
+def test_raise_lots_unknown_category(src: FunPaySource, fake: FakeFunPay):
+    with pytest.raises(SourceError, match="не найдена"):
+        src.raise_lots(99999)
+    with pytest.raises(SourceError):
+        src.raise_lots(4, [])
+    assert not any(r.url.path == "/lots/raise" for r in fake.requests)
+
+
+def test_category_of_subcategory(src: FunPaySource):
+    assert src.category_of_subcategory(148) == 4
+    assert src.category_of_subcategory(149) == 4
+    assert src.category_of_subcategory(82) == 41
+    assert src.category_of_subcategory(2) == 4          # валютная подкатегория — запасной вариант
+    assert src.category_of_subcategory(1181) == 1067
+    assert src.category_of_subcategory(99999) is None
+    assert src.category_of_subcategory("abc") is None

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="utf-8"><title>Продажи — FunPay</title></head>
+<body data-app-data="{&quot;locale&quot;:&quot;ru&quot;,&quot;csrf-token&quot;:&quot;csrf-token-test-123&quot;,&quot;userId&quot;:777001}">
+<header><div class="user-link-name">TestSeller</div></header>
+<div class="content">
+<div class="page-header"><h1>Продажи</h1></div>
+<div class="tc table-clickable table-hover">
+  <div class="tc-header">
+    <div class="tc-date">Дата</div>
+    <div class="tc-order">Заказ</div>
+    <div class="tc-user">Покупатель</div>
+    <div class="tc-status">Статус</div>
+    <div class="tc-price">Сумма</div>
+  </div>
+
+  <a href="https://funpay.com/orders/ORDER0001/" class="tc-item info">
+    <div class="tc-date"><div class="tc-date-time">сегодня, 14:05</div><div class="tc-date-left">5 минут назад</div></div>
+    <div class="tc-order">#ORDER0001</div>
+    <div class="order-desc">
+      <div>WoT | 15 топов, Об. 279(р) | RU</div>
+      <div class="text-muted">World of Tanks, Аккаунты</div>
+    </div>
+    <div class="tc-user">
+      <div class="media media-user online">
+        <div class="media-left"><div class="avatar-photo pseudo-a" data-href="https://funpay.com/users/6001/" style="background-image: url(/img/u1.jpg);"></div></div>
+        <div class="media-body">
+          <div class="media-user-name"><span class="pseudo-a" tabindex="0" data-href="https://funpay.com/users/6001/">Buyer_One</span></div>
+          <div class="media-user-status">онлайн</div>
+        </div>
+      </div>
+    </div>
+    <div class="tc-status text-primary">Оплачен</div>
+    <div class="tc-price text-nowrap tc-seller-sum">28 990 ₽</div>
+  </a>
+
+  <a href="https://funpay.com/orders/ORDER0002/" class="tc-item">
+    <div class="tc-date"><div class="tc-date-time">вчера, 09:10</div><div class="tc-date-left">1 день назад</div></div>
+    <div class="tc-order">#ORDER0002</div>
+    <div class="order-desc">
+      <div>WoT | 8 топов | EU</div>
+      <div class="text-muted">World of Tanks, Аккаунты</div>
+    </div>
+    <div class="tc-user">
+      <div class="media media-user">
+        <div class="media-body">
+          <div class="media-user-name"><span class="pseudo-a" tabindex="0" data-href="https://funpay.com/users/6002/">second_buyer</span></div>
+          <div class="media-user-status">был 3 часа назад</div>
+        </div>
+      </div>
+    </div>
+    <div class="tc-status text-success">Закрыт</div>
+    <div class="tc-price text-nowrap tc-seller-sum">15 990 ₽</div>
+  </a>
+
+  <a href="https://funpay.com/orders/ORDER0003/" class="tc-item warning">
+    <div class="tc-date"><div class="tc-date-time">12 марта 2025, 10:00</div><div class="tc-date-left">год назад</div></div>
+    <div class="tc-order">#ORDER0003</div>
+    <div class="order-desc">
+      <div>Dota 2, 5000 MMR</div>
+      <div class="text-muted">Dota 2, Аккаунты</div>
+    </div>
+    <div class="tc-user">
+      <div class="media media-user">
+        <div class="media-body">
+          <div class="media-user-name"><a href="https://funpay.com/users/6003/">refund_guy</a></div>
+          <div class="media-user-status">был неделю назад</div>
+        </div>
+      </div>
+    </div>
+    <div class="tc-status text-warning">Возврат</div>
+    <div class="tc-price text-nowrap tc-seller-sum">$45</div>
+  </a>
+</div>
+<form class="form-inline" method="post" action="https://funpay.com/orders/trade">
+  <input type="hidden" name="continue" value="ORDER0003">
+  <button type="submit" class="btn btn-default">Показать ещё</button>
+</form>
+</div>
+</body>
+</html>
