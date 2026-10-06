@@ -14,6 +14,23 @@ from ..storage import Storage
 log = logging.getLogger("app")
 
 
+class _NullNotifier:
+    """Заглушка, если модуль уведомлений недоступен: ничего не отправляет."""
+
+    enabled = False
+
+    def send(self, text: str, **kwargs) -> bool:
+        return False
+
+    def test_connection(self) -> dict:
+        return {"ok": False, "error": "модуль уведомлений недоступен"}
+
+    def __getattr__(self, name):
+        if name.startswith("format_"):
+            return lambda *a, **k: ""
+        raise AttributeError(name)
+
+
 class AppContext:
     def __init__(self, settings: Optional[Settings] = None, storage: Optional[Storage] = None,
                  profiles: Optional[ProfileStore] = None):
@@ -23,6 +40,7 @@ class AppContext:
         self._lock = threading.RLock()
         self._funpay = None
         self._lolz = None
+        self._notifier = None
         self.auth_state: dict[str, dict] = {
             "funpay": {"ok": None, "username": None, "error": None, "checked_at": None},
             "lolz": {"ok": None, "username": None, "error": None, "checked_at": None},
@@ -44,6 +62,26 @@ class AppContext:
                 from ..sources.lolz import LolzSource
                 self._lolz = LolzSource(self.settings.lolz)
             return self._lolz
+
+    @property
+    def notifier(self):
+        """Telegram-уведомления (настройки читаются при каждой отправке)."""
+        with self._lock:
+            if self._notifier is None:
+                try:
+                    from ..notify import TelegramNotifier
+                    self._notifier = TelegramNotifier(lambda: self.settings.telegram)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("уведомления Telegram недоступны: %s", e)
+                    self._notifier = _NullNotifier()
+            return self._notifier
+
+    def notify(self, text: str, kind: str = "info") -> bool:
+        try:
+            return self.notifier.send(text, kind=kind)
+        except Exception as e:  # noqa: BLE001
+            log.warning("не удалось отправить уведомление: %s", e)
+            return False
 
     def source(self, name: str):
         if name == "funpay":

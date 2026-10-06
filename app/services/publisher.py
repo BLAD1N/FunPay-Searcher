@@ -178,4 +178,8 @@ class PublisherService:
             if lot.status == LotStatus.ACTIVE and self.ctx.settings.monitor.auto_deactivate:
                 lot = self.set_active(lot, False, reason="исходное объявление продано или снято")
             self.ctx.log("monitor", f"исходник лота #{lot.id} недоступен: {lot.source_url}", level="warning")
+            try:
+                self.ctx.notify(self.ctx.notifier.format_source_sold(lot), kind="sold")
+            except Exception as e:  # noqa: BLE001
+                self.ctx.log("monitor", f"уведомление о продаже исходника: {e}", level="warning")
         return lot

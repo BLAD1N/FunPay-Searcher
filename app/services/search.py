@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import threading
 import traceback
-from typing import Optional
+from typing import Callable, Optional
 
 from ..matching import evaluate
 from ..models import Found, FoundStatus, MatchResult, Profile, SearchRunStats, utcnow
@@ -22,6 +22,8 @@ class SearchService:
         self.last: list[SearchRunStats] = []
         self.last_started: Optional[str] = None
         self.last_finished: Optional[str] = None
+        # вызывается после каждой задачи (профиль+источник) со списком НОВЫХ подходящих находок
+        self.on_new_candidates: Optional[Callable[[Profile, list[Found]], None]] = None
 
     # ----------------------------------------------------------- state
     @property
@@ -102,6 +104,7 @@ class SearchService:
                 listings = source.search(profile)
                 stats.fetched = len(listings)
                 self.progress["fetched"] = len(listings)
+                new_candidates: list[Found] = []
                 for listing in listings:
                     if self._cancel.is_set():
                         break
@@ -112,6 +115,12 @@ class SearchService:
                     if is_new and found.match.matched:
                         stats.new += 1
                         self.progress["new"] = stats.new
+                        new_candidates.append(found)
+                if new_candidates and self.on_new_candidates:
+                    try:
+                        self.on_new_candidates(profile, new_candidates)
+                    except Exception as e:  # noqa: BLE001
+                        self.ctx.log("search", f"обработчик новых находок: {e}", level="error")
                 self.ctx.log("search", f"{profile.name} / {source_name}: получено {stats.fetched}, "
                                        f"подходит {stats.matched}, новых {stats.new}")
             except Exception as e:  # noqa: BLE001

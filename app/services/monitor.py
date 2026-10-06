@@ -13,10 +13,15 @@ from .search import SearchService
 
 
 class MonitorService:
-    def __init__(self, ctx: AppContext, publisher: PublisherService, search: SearchService):
+    def __init__(self, ctx: AppContext, publisher: PublisherService, search: SearchService,
+                 orders=None, raiser=None):
         self.ctx = ctx
         self.publisher = publisher
         self.search = search
+        self.orders = orders      # OrdersService (опционально)
+        self.raiser = raiser      # RaiserService (опционально)
+        self._last_orders: Optional[float] = None
+        self._last_raise: Optional[float] = None
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._busy = threading.Lock()
@@ -64,6 +69,22 @@ class MonitorService:
                     if not self.search.running:
                         self.ctx.log("search", "автопоиск по расписанию")
                         self.search.start()
+            # заказы (продажи наших лотов)
+            if self.orders and s.orders_check_minutes and self.ctx.settings.funpay.golden_key:
+                if self._last_orders is None or time.time() - self._last_orders >= s.orders_check_minutes * 60:
+                    self._last_orders = time.time()
+                    try:
+                        self.orders.sync()
+                    except Exception as e:  # noqa: BLE001
+                        self.ctx.log("orders", f"ошибка проверки заказов: {e}", level="error")
+            # автоподнятие лотов
+            if self.raiser and s.auto_raise_hours and s.auto_raise_hours > 0 and self.ctx.settings.funpay.golden_key:
+                if self._last_raise is None or time.time() - self._last_raise >= s.auto_raise_hours * 3600:
+                    self._last_raise = time.time()
+                    try:
+                        self.raiser.run()
+                    except Exception as e:  # noqa: BLE001
+                        self.ctx.log("raise", f"ошибка автоподнятия: {e}", level="error")
 
     # --------------------------------------------------------- run once
     def run_once(self, max_candidates: int = 100) -> dict:

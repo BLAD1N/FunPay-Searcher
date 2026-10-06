@@ -49,10 +49,34 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
     ctx = ctx or AppContext()
     search = SearchService(ctx)
     publisher = PublisherService(ctx)
-    monitor = MonitorService(ctx, publisher, search)
+    orders = raiser = None
+    try:
+        from .services.orders import OrdersService
+        from .services.raiser import RaiserService
+        orders = OrdersService(ctx, ctx.notifier)
+        raiser = RaiserService(ctx)
+    except Exception as e:  # noqa: BLE001 — модули могут отсутствовать в урезанной сборке
+        log.warning("сервисы заказов/поднятия недоступны: %s", e)
+    monitor = MonitorService(ctx, publisher, search, orders=orders, raiser=raiser)
+
+    def _after_search(profile: Profile, new_found: list[Found]) -> None:
+        """Новые подходящие находки: автопубликация (если включена) и уведомление в Telegram."""
+        if ctx.settings.funpay.auto_publish and ctx.settings.funpay.golden_key:
+            for f in new_found:
+                try:
+                    publisher.create(f, publish=True)
+                except Exception as e:  # noqa: BLE001
+                    ctx.log("lots", f"автопубликация {f.listing.key}: {e}", level="error")
+        try:
+            ctx.notify(ctx.notifier.format_candidates(profile.name, new_found), kind="candidates")
+        except Exception as e:  # noqa: BLE001
+            ctx.log("search", f"уведомление о находках: {e}", level="warning")
+
+    search.on_new_candidates = _after_search
 
     app = FastAPI(title="FunPay Searcher", version=__version__, docs_url="/api/docs", redoc_url=None)
     app.state.ctx, app.state.search, app.state.publisher, app.state.monitor = ctx, search, publisher, monitor
+    app.state.orders, app.state.raiser = orders, raiser
 
     @app.on_event("startup")
     def _startup():
@@ -127,6 +151,10 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
             "monitor": monitor.status(),
             "auth": ctx.auth_state,
             "auto_publish": ctx.settings.funpay.auto_publish,
+            "orders": {"paid": len(ctx.storage.list_orders(status=["paid"], limit=100000)),
+                       "total": len(ctx.storage.list_orders(limit=100000))},
+            "raise": raiser.status() if raiser else None,
+            "telegram": {"enabled": bool(getattr(ctx.notifier, "enabled", False))},
         }
 
     # ----------------------------------------------------------- settings
@@ -409,6 +437,124 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
             return ctx.lolz.category_params(category)
         except Exception as e:  # noqa: BLE001
             raise HTTPException(502, f"Lolzteam: {e}")
+
+    # ------------------------------------------------------------- orders
+    @app.get("/api/orders")
+    def list_orders(status: Optional[str] = None, limit: int = Query(200, le=5000)):
+        statuses = [x for x in (status or "").split(",") if x] or None
+        if orders:
+            return orders.list(status=statuses, limit=limit)
+        return [o.model_dump(mode="json") for o in ctx.storage.list_orders(status=statuses, limit=limit)]
+
+    @app.post("/api/orders/sync")
+    def sync_orders():
+        _require_funpay()
+        if not orders:
+            raise HTTPException(501, "сервис заказов недоступен")
+        return orders.sync()
+
+    @app.post("/api/orders/{order_id}/note")
+    def order_note(order_id: int, body: dict):
+        if not ctx.storage.get_order(order_id):
+            raise HTTPException(404, "заказ не найден")
+        ctx.storage.set_order_fields(order_id, note=str(body.get("note", ""))[:2000])
+        return ctx.storage.get_order(order_id).model_dump(mode="json")
+
+    # -------------------------------------------------------- raise / telegram
+    @app.post("/api/raise")
+    def raise_lots():
+        _require_funpay()
+        if not raiser:
+            raise HTTPException(501, "сервис поднятия недоступен")
+        return raiser.run()
+
+    @app.post("/api/telegram/test")
+    def telegram_test():
+        n = ctx.notifier
+        if not getattr(n, "enabled", False):
+            raise HTTPException(400, "Telegram не настроен: включите уведомления, укажите токен бота и chat_id")
+        info = n.test_connection()
+        if info.get("ok"):
+            n.send("✅ FunPay Searcher: уведомления подключены", kind="info")
+        return info
+
+    # ------------------------------------------------------------- export
+    def _csv_response(rows: list[dict], columns: list[str], filename: str):
+        import csv
+        import io
+        buf = io.StringIO()
+        buf.write("\ufeff")  # BOM, чтобы Excel открыл UTF-8 корректно
+        w = csv.DictWriter(buf, fieldnames=columns, delimiter=";", extrasaction="ignore")
+        w.writeheader()
+        for r in rows:
+            w.writerow({c: ("" if r.get(c) is None else r.get(c)) for c in columns})
+        from fastapi.responses import Response
+        return Response(content=buf.getvalue(), media_type="text/csv; charset=utf-8",
+                        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+    @app.get("/api/export/found.csv")
+    def export_found(profile_id: Optional[str] = None, status: Optional[str] = None):
+        statuses = [x for x in (status or "").split(",") if x] or None
+        rows = []
+        for f in ctx.storage.list_found(profile_id=profile_id, status=statuses, limit=100000):
+            l = f.listing
+            rows.append({"id": f.id, "profile": _profile_names().get(f.profile_id, f.profile_id), "status": f.status.value,
+                         "source": l.source, "title": l.title, "price": l.price, "suggested_price": f.suggested_price,
+                         "region": l.region, "score": f.match.score, "highlights": ", ".join(f.match.highlights),
+                         "seller": l.seller_name, "seller_url": l.seller_url, "url": l.url,
+                         "available": f.available, "first_seen": f.first_seen.isoformat() if f.first_seen else ""})
+        return _csv_response(rows, ["id", "profile", "status", "source", "title", "price", "suggested_price", "region",
+                                    "score", "highlights", "seller", "seller_url", "url", "available", "first_seen"],
+                             "found.csv")
+
+    @app.get("/api/export/lots.csv")
+    def export_lots(status: Optional[str] = None):
+        statuses = [x for x in (status or "").split(",") if x] or None
+        rows = []
+        for l in ctx.storage.list_lots(status=statuses, limit=100000):
+            rows.append({"id": l.id, "status": l.status.value, "title": l.title_ru, "price": l.price,
+                         "source_price": l.source_price, "margin": round(l.price - l.source_price, 2),
+                         "funpay_url": l.funpay_url, "source_url": l.source_url, "seller_url": l.seller_url,
+                         "source_available": l.source_available,
+                         "created_at": l.created_at.isoformat() if l.created_at else ""})
+        return _csv_response(rows, ["id", "status", "title", "price", "source_price", "margin", "funpay_url",
+                                    "source_url", "seller_url", "source_available", "created_at"], "lots.csv")
+
+    @app.get("/api/export/orders.csv")
+    def export_orders():
+        rows = [{**o.model_dump(mode="json")} for o in ctx.storage.list_orders(limit=100000)]
+        return _csv_response(rows, ["id", "funpay_order_id", "status", "title", "price", "buyer_name", "buyer_url",
+                                    "order_url", "source_url", "source_price", "order_date", "note"], "orders.csv")
+
+    # ------------------------------------------------------------- market
+    @app.get("/api/found/{found_id}/market")
+    def found_market(found_id: int):
+        """Статистика цен по похожим находкам (тот же профиль): помогает оценить, не завышена ли цена."""
+        import statistics
+        f = _get_found(found_id)
+        same = [x for x in ctx.storage.list_found(profile_id=f.profile_id, limit=100000)
+                if x.match.matched and x.listing.price > 0]
+        by_source: dict[str, list[float]] = {}
+        for x in same:
+            by_source.setdefault(x.listing.source, []).append(x.listing.price)
+
+        def _stats(prices: list[float]) -> Optional[dict]:
+            if not prices:
+                return None
+            ps = sorted(prices)
+            return {"count": len(ps), "min": ps[0], "median": statistics.median(ps),
+                    "avg": round(sum(ps) / len(ps), 2), "max": ps[-1]}
+
+        all_prices = [x.listing.price for x in same]
+        below = sum(1 for p_ in all_prices if p_ < f.listing.price)
+        return {
+            "price": f.listing.price,
+            "suggested_price": f.suggested_price,
+            "all": _stats(all_prices),
+            "by_source": {k: _stats(v) for k, v in by_source.items()},
+            "percentile": round(100 * below / len(all_prices)) if all_prices else None,
+            "cheaper_than_suggested": sum(1 for p_ in all_prices if f.suggested_price and p_ < f.suggested_price),
+        }
 
     # ----------------------------------------------------------- utilities
     @app.get("/api/events")
