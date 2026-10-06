@@ -93,6 +93,12 @@ function fmtRel(v) {
   if (text === 'только что') return text;
   return past ? text + ' назад' : 'через ' + text;
 }
+/** Относительное время с точной датой в подсказке: <time datetime title="06.10.2026, 14:05">5 мин назад</time>. */
+function relTime(v, { prefix = '', fallback = '—' } = {}) {
+  const d = parseDate(v);
+  if (!d) return h('span', { class: 'muted' }, fallback);
+  return h('time', { datetime: d.toISOString(), title: fmtDate(d) }, prefix + fmtRel(d));
+}
 function fmtDuration(a, b) {
   const da = parseDate(a), db = parseDate(b);
   if (!da || !db) return '—';
@@ -173,33 +179,70 @@ function qs(params) {
 // 3. Уведомления, модальные окна, подтверждения
 // ----------------------------------------------------------------------------
 
+const TOAST_MAX = 3;
+let toastSeq = 0;
 function toast(message, type = 'info', ms = 4500) {
   const root = $('#toasts');
-  const el = h('div', { class: 'toast ' + type, role: type === 'error' ? 'alert' : 'status' },
+  // не больше TOAST_MAX уведомлений на экране: самые старые убираем сразу
+  while (root.children.length >= TOAST_MAX) root.firstElementChild.remove();
+  let timer = null;
+  const hide = () => { clearTimeout(timer); el.classList.add('hide'); setTimeout(() => el.remove(), 220); };
+  const delay = type === 'error' ? ms + 3000 : ms;
+  const arm = () => { clearTimeout(timer); timer = setTimeout(hide, delay); };
+  const el = h('div', { class: 'toast ' + type, role: type === 'error' ? 'alert' : 'status', dataset: { seq: ++toastSeq }, onmouseenter: () => clearTimeout(timer), onmouseleave: arm },
     h('span', {}, message),
-    h('button', { class: 'toast-close', 'aria-label': 'Закрыть', onclick: () => hide() }, '×'));
-  const hide = () => { el.classList.add('hide'); setTimeout(() => el.remove(), 220); };
+    h('button', { type: 'button', class: 'toast-close', 'aria-label': 'Закрыть уведомление', onclick: hide }, '×'));
   root.append(el);
-  setTimeout(hide, type === 'error' ? ms + 3000 : ms);
+  arm();
 }
 
-/** Модальное окно. Возвращает {close, body, footer}. */
+/** Стек открытых модальных окон: Esc закрывает верхнее, фокус возвращается туда, откуда окно открыли. */
+const modalStack = [];
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+let modalSeq = 0;
+
+/** Модальное окно. Возвращает {close, body, footer, el}. */
 function openModal({ title, body, footer, size = '', onClose }) {
   const root = $('#modal-root');
+  const opener = document.activeElement;
+  const titleId = 'modal-title-' + (++modalSeq);
   const bodyEl = h('div', { class: 'modal-body' }, body);
   const footerEl = h('div', { class: 'modal-footer' }, footer);
   if (!footer) footerEl.hidden = true;
-  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); if (onClose) onClose(); };
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
-  const modal = h('div', { class: 'modal ' + size, role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
-    h('div', { class: 'modal-header' }, h('h2', {}, title), h('button', { class: 'modal-close', 'aria-label': 'Закрыть', onclick: close }, '×')),
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    backdrop.remove();
+    const i = modalStack.indexOf(entry); if (i >= 0) modalStack.splice(i, 1);
+    if (onClose) onClose();
+    // возвращаем фокус элементу, с которого открыли окно (если он ещё на странице)
+    if (opener && opener.isConnected && typeof opener.focus === 'function' && !root.contains(opener)) opener.focus();
+  };
+  const modal = h('div', { class: 'modal ' + size, role: 'dialog', 'aria-modal': 'true', 'aria-label': title, 'aria-labelledby': titleId, tabindex: '-1' },
+    h('div', { class: 'modal-header' }, h('h2', { id: titleId }, title), h('button', { type: 'button', class: 'modal-close', 'aria-label': 'Закрыть окно', onclick: close }, '×')),
     bodyEl, footerEl);
   const backdrop = h('div', { class: 'modal-backdrop', onmousedown: (e) => { if (e.target === backdrop) close(); } }, modal);
+  const entry = { close, el: modal };
+  modalStack.push(entry);
   root.append(backdrop);
-  document.addEventListener('keydown', onKey);
-  const first = modal.querySelector('input, textarea, select, button.btn-primary, button');
-  if (first) setTimeout(() => first.focus(), 30);
+  const first = modal.querySelector('input:not([type="checkbox"]), textarea, select, button.btn-primary, button:not(.modal-close)');
+  (first || modal).focus();
   return { close, body: bodyEl, footer: footerEl, el: modal };
+}
+function closeTopModal() { const top = modalStack[modalStack.length - 1]; if (top) { top.close(); return true; } return false; }
+/** Ловушка фокуса для верхнего окна: Tab/Shift+Tab ходят по кругу, фокус извне возвращается в окно. */
+function trapModalTab(e) {
+  const top = modalStack[modalStack.length - 1];
+  if (!top) return;
+  const modal = top.el;
+  const items = [...modal.querySelectorAll(FOCUSABLE)].filter(el => el.offsetParent !== null);
+  e.preventDefault();
+  if (!items.length) { modal.focus(); return; }
+  const cur = document.activeElement, i = items.indexOf(cur);
+  const inside = modal.contains(cur);
+  const next = !inside ? (e.shiftKey ? items.length - 1 : 0) : e.shiftKey ? (i <= 0 ? items.length - 1 : i - 1) : (i >= items.length - 1 ? 0 : i + 1);
+  items[next].focus();
 }
 
 /** Диалог подтверждения: await confirmDialog('Удалить?') -> true/false. */
@@ -208,8 +251,8 @@ function confirmDialog(text, { title = 'Подтверждение', ok = 'Да'
     const m = openModal({
       title, size: 'sm', body: h('p', {}, text), onClose: () => resolve(false),
       footer: [
-        h('button', { class: 'btn', onclick: () => m.close() }, 'Отмена'),
-        h('button', { class: 'btn ' + (danger ? 'btn-danger' : 'btn-primary'), onclick: () => { resolve(true); m.close(); } }, ok),
+        h('button', { type: 'button', class: 'btn', onclick: () => m.close() }, 'Отмена'),
+        h('button', { type: 'button', class: 'btn ' + (danger ? 'btn-danger' : 'btn-primary'), onclick: () => { resolve(true); m.close(); } }, ok),
       ],
     });
   });
@@ -225,7 +268,7 @@ function showJsonModal(title, data) {
 // ----------------------------------------------------------------------------
 
 const state = { status: null, profiles: [], funpayCategories: null, lolzCategories: null, pollTimer: null, pageToken: 0,
-  chatUnread: null };   // число непрочитанных чатов; null — страница чатов ещё не открывалась (бейдж скрыт)
+  chatUnread: null, pageTitle: '' };   // число непрочитанных чатов; null — страница чатов ещё не открывалась (бейдж скрыт)
 
 const FOUND_STATUS = {
   new: { label: 'Новое', cls: 'accent' }, candidate: { label: 'Кандидат', cls: 'success' },
@@ -254,7 +297,15 @@ function availIndicator(available, checkedAt, { prefix = '' } = {}) {
 function emptyState(title, text, icon = '◌') {
   return h('div', { class: 'empty' }, h('div', { class: 'empty-icon' }, icon), h('div', { class: 'empty-title' }, title), text ? h('div', {}, text) : null);
 }
-function loadingState() { return h('div', { class: 'page-loading' }, h('span', { class: 'spinner' }), ' Загрузка…'); }
+function loadingState() { return h('div', { class: 'page-loading', role: 'status' }, h('span', { class: 'spinner' }), ' Загрузка…'); }
+/** Скелетон списка на время загрузки: kind = 'card' (карточки) | 'row' (строки таблицы). */
+function skeletonList(n = 4, kind = 'card') {
+  const sk = (cls) => h('span', { class: 'sk ' + cls });
+  const item = kind === 'row'
+    ? () => h('div', { class: 'sk-card row' }, sk('h-24 w-80'), h('div', { class: 'sk-col' }, sk('h-16 w-60'), sk('w-40')), h('div', { class: 'sk-col right' }, sk('h-16 w-80'), sk('w-60')), h('div', { class: 'sk-col right' }, sk('h-24 w-100')))
+    : () => h('div', { class: 'sk-card' }, sk('box'), h('div', { class: 'sk-col' }, sk('w-40'), sk('h-16 w-80'), sk('w-60'), sk('w-20')), h('div', { class: 'sk-col right' }, sk('w-60'), sk('h-24 w-80'), sk('w-100')));
+  return h('div', { class: 'sk-list', role: 'status', 'aria-label': 'Загрузка' }, Array.from({ length: n }, item));
+}
 function extLink(href, text) { return href ? h('a', { href, target: '_blank', rel: 'noopener' }, text) : null; }
 
 function field(label, control, hint, cls = '') {
@@ -541,16 +592,21 @@ function funpayCategoryName(id) {
 // ----------------------------------------------------------------------------
 
 const ROUTES = [
-  { re: /^#\/dashboard\/?$/, nav: 'dashboard', page: pageDashboard },
-  { re: /^#\/found\/?$/, nav: 'found', page: pageFound },
-  { re: /^#\/lots\/?$/, nav: 'lots', page: pageLots },
-  { re: /^#\/orders\/?$/, nav: 'orders', page: pageOrders },
-  { re: /^#\/chat\/?$/, nav: 'chat', page: pageChat },
-  { re: /^#\/profiles\/?$/, nav: 'profiles', page: pageProfiles },
-  { re: /^#\/profiles\/([^/]+)\/?$/, nav: 'profiles', page: pageProfileEditor },
-  { re: /^#\/settings\/?$/, nav: 'settings', page: pageSettings },
-  { re: /^#\/log\/?$/, nav: 'log', page: pageLog },
+  { re: /^#\/dashboard\/?$/, nav: 'dashboard', page: pageDashboard, title: 'Панель' },
+  { re: /^#\/found\/?$/, nav: 'found', page: pageFound, title: 'Найдено' },
+  { re: /^#\/lots\/?$/, nav: 'lots', page: pageLots, title: 'Лоты' },
+  { re: /^#\/orders\/?$/, nav: 'orders', page: pageOrders, title: 'Продажи' },
+  { re: /^#\/chat\/?$/, nav: 'chat', page: pageChat, title: 'Чаты' },
+  { re: /^#\/profiles\/?$/, nav: 'profiles', page: pageProfiles, title: 'Профили' },
+  { re: /^#\/profiles\/([^/]+)\/?$/, nav: 'profiles', page: pageProfileEditor, title: 'Профиль' },
+  { re: /^#\/settings\/?$/, nav: 'settings', page: pageSettings, title: 'Настройки' },
+  { re: /^#\/log\/?$/, nav: 'log', page: pageLog, title: 'Журнал' },
 ];
+/** Заголовок вкладки: «Страница — Бренд». */
+function setDocTitle() {
+  const brand = (state.status && state.status.brand) || 'FunPay Searcher';
+  document.title = state.pageTitle ? `${state.pageTitle} — ${brand}` : brand;
+}
 
 function stopPolling() { if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; } }
 /** Периодический опрос (только текущая страница): fn вызывается каждые ms. */
@@ -562,8 +618,11 @@ async function navigate() {
   if (!route) { location.hash = '#/dashboard'; return; }
   const param = decodeURIComponent((hash.match(route.re)[1] || ''));
   stopPolling();
+  while (closeTopModal()) { /* при смене страницы закрываем все окна */ }
   const token = ++state.pageToken;
-  document.querySelectorAll('.nav-item').forEach(a => a.classList.toggle('active', a.dataset.route === route.nav));
+  state.pageTitle = route.title;
+  setDocTitle();
+  document.querySelectorAll('.nav-item').forEach(a => { const on = a.dataset.route === route.nav; a.classList.toggle('active', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   const main = $('#main');
   replace(main, loadingState());
   try {
@@ -587,7 +646,7 @@ async function loadStatus() {
 function updateSidebar(st) {
   const brand = st.brand || 'FunPay Searcher';
   $('#brand-name').textContent = brand;
-  document.title = brand;
+  setDocTitle();
   $('#app-version').textContent = st.version ? 'v' + st.version : '';
   const f = (st.counts && st.counts.found) || {}, l = (st.counts && st.counts.lots) || {};
   setBadge('#badge-candidates', (f.candidate || 0) + (f.new || 0));
@@ -630,7 +689,7 @@ function profileName(id) { const p = state.profiles.find(x => x.id === id); retu
 // ----------------------------------------------------------------------------
 
 async function pageDashboard(root) {
-  const [status, profiles] = await Promise.all([loadStatus(), loadProfiles()]);
+  const [status, profiles, settings] = await Promise.all([loadStatus(), loadProfiles(), API.get('/api/settings').catch(() => null)]);
   const sel = { profiles: new Set(), sources: new Set() };    // пусто = все
   let extra = { found: [], lots: [], events: [] };
   let wasRunning = !!(status.search && status.search.running);
@@ -638,6 +697,7 @@ async function pageDashboard(root) {
   let tickCount = 0;
 
   const progressBox = h('div'), tilesBox = h('div', { class: 'grid grid-5' }), lastBox = h('div'), monitorBox = h('div'), eventsBox = h('div');
+  const onboardingBox = h('div');
 
   // --- выпадающие списки выбора профилей и источников ---
   const dropdown = (label, options, set) => {
@@ -651,7 +711,7 @@ async function pageDashboard(root) {
   const profileOpts = profiles.map(p => ({ value: p.id, label: p.name + (p.enabled ? '' : ' (выкл.)') }));
   const sourceOpts = [{ value: 'funpay', label: 'FunPay' }, { value: 'lolz', label: 'Lolz' }];
 
-  const startBtn = h('button', { class: 'btn btn-primary btn-xl', onclick: (e) => busy(e.currentTarget, async () => {
+  const startBtn = h('button', { class: 'btn btn-primary btn-xl', id: 'start-search', onclick: (e) => busy(e.currentTarget, async () => {
     await API.post('/api/search', { profile_ids: sel.profiles.size ? [...sel.profiles] : null, sources: sel.sources.size ? [...sel.sources] : null });
     toast('Поиск запущен', 'success');
     await tick();
@@ -665,7 +725,7 @@ async function pageDashboard(root) {
 
   append(root,
     h('div', { class: 'page-header' }, h('div', {}, h('h1', {}, 'Панель'), h('div', { class: 'sub' }, 'Поиск аккаунтов, состояние лотов и мониторинг исходников'))),
-    h('div', { class: 'stack' }, hero, tilesBox,
+    h('div', { class: 'stack' }, onboardingBox, hero, tilesBox,
       h('div', { class: 'grid grid-2' }, h('div', { class: 'card' }, h('div', { class: 'card-header' }, h('h2', {}, 'Последний поиск')), lastBox),
         h('div', { class: 'card' }, h('div', { class: 'card-header' }, h('h2', {}, 'Мониторинг исходников')), monitorBox)),
       h('div', { class: 'card' }, h('div', { class: 'card-header' }, h('h2', {}, 'Последние события'), h('a', { href: '#/log', class: 'small' }, 'Весь журнал →')), eventsBox)));
@@ -683,9 +743,9 @@ async function pageDashboard(root) {
       h('div', { class: 'progress' + (pct == null ? ' indeterminate' : ''), role: 'progressbar', 'aria-valuenow': pct ?? 0 }, h('span', { style: pct == null ? '' : `width:${pct}%` })),
       h('div', { class: 'row between mt-8' },
         h('div', { class: 'progress-stats' },
-          h('div', {}, h('div', { class: 'k' }, 'Получено'), h('div', { class: 'v' }, p.fetched ?? 0)),
-          h('div', {}, h('div', { class: 'k' }, 'Подошло'), h('div', { class: 'v success' }, p.matched ?? 0)),
-          h('div', {}, h('div', { class: 'k' }, 'Новых'), h('div', { class: 'v accent' }, p.new ?? 0))),
+          h('div', {}, h('div', { class: 'k' }, 'Получено'), h('div', { class: 'v num' }, fmtNum(p.fetched ?? 0))),
+          h('div', {}, h('div', { class: 'k' }, 'Подошло'), h('div', { class: 'v num success' }, fmtNum(p.matched ?? 0))),
+          h('div', {}, h('div', { class: 'k' }, 'Новых'), h('div', { class: 'v num accent' }, fmtNum(p.new ?? 0)))),
         h('div', { class: 'muted small' }, p.total ? `Шаг ${p.done || 0} из ${p.total}` : ''))));
   };
   const renderTiles = (st) => {
@@ -694,7 +754,7 @@ async function pageDashboard(root) {
     const broken = extra.lots.filter(x => x.source_available === false).length;
     const paid = (st.orders && st.orders.paid) || 0;
     const tile = (label, value, sub, cls = '') => h('div', { class: 'stat-tile ' + cls }, h('div', { class: 'stat-label' }, label), h('div', { class: 'stat-value' }, nfRU.format(value || 0)), sub ? h('div', { class: 'stat-sub' }, sub) : null);
-    const link = (href, el) => h('a', { href, style: 'text-decoration:none;color:inherit' }, el);
+    const link = (href, el) => h('a', { href, class: 'tile-link' }, el);
     replace(tilesBox,
       link('#/found', tile('Кандидатов', f.candidate || 0, `новых: ${f.new || 0} · отклонено: ${f.rejected || 0}`)),
       tile('Новых за сегодня', today, 'по времени первого обнаружения'),
@@ -709,17 +769,17 @@ async function pageDashboard(root) {
       h('thead', {}, h('tr', {}, h('th', { style: 'min-width:120px' }, 'Профиль'), h('th', {}, 'Источник'), h('th', { class: 'num' }, 'Получено'), h('th', { class: 'num' }, 'Подошло'), h('th', { class: 'num' }, 'Новых'), h('th', { class: 'num' }, 'Ошибки'))),
       h('tbody', {}, last.map(r => h('tr', {},
         h('td', {}, h('div', {}, profileName(r.profile_id)),
-          h('div', { class: 'muted small', title: 'Начало: ' + fmtDate(r.started_at) + (r.finished_at ? '\nДлительность: ' + fmtDuration(r.started_at, r.finished_at) : '') }, fmtRel(r.started_at))),
+          h('div', { class: 'muted small' }, h('time', { datetime: r.started_at || '', title: 'Начало: ' + fmtDate(r.started_at) + (r.finished_at ? '\nДлительность: ' + fmtDuration(r.started_at, r.finished_at) : '') }, fmtRel(r.started_at)))),
         h('td', {}, sourceChip(r.source)),
-        h('td', { class: 'num' }, r.fetched), h('td', { class: 'num success' }, r.matched), h('td', { class: 'num accent' }, r.new),
+        h('td', { class: 'num' }, fmtNum(r.fetched)), h('td', { class: 'num success' }, fmtNum(r.matched)), h('td', { class: 'num accent' }, fmtNum(r.new)),
         h('td', { class: 'num' }, (r.errors || []).length ? h('span', { class: 'chip danger', title: r.errors.join('\n') }, r.errors.length) : h('span', { class: 'muted' }, '—'))))))));
   };
   const renderMonitor = (st) => {
     const mo = st.monitor || {}, rs = st.raise || null, rp = st.reprice || null, ar = st.autoreply || null, lr = ar && ar.last_result;
     replace(monitorBox,
       h('div', { class: 'grid grid-2 mb-16' },
-        h('div', {}, h('div', { class: 'stat-label' }, 'Последняя проверка'), h('div', { class: 'bold', title: fmtDate(mo.last_run) }, mo.last_run ? fmtRel(mo.last_run) : 'ещё не было')),
-        h('div', {}, h('div', { class: 'stat-label' }, 'Следующая проверка'), h('div', { class: 'bold', title: fmtDate(mo.next_run) }, mo.next_run ? fmtRel(mo.next_run) : (mo.interval_minutes ? 'не запланирована' : 'мониторинг выключен')))),
+        h('div', {}, h('div', { class: 'stat-label' }, 'Последняя проверка'), h('div', { class: 'bold' }, mo.last_run ? relTime(mo.last_run) : 'ещё не было')),
+        h('div', {}, h('div', { class: 'stat-label' }, 'Следующая проверка'), h('div', { class: 'bold' }, mo.next_run ? relTime(mo.next_run) : (mo.interval_minutes ? 'не запланирована' : 'мониторинг выключен')))),
       h('div', { class: 'row between' },
         h('div', { class: 'muted small' }, mo.running ? h('span', { class: 'row' }, h('span', { class: 'spinner' }), 'идёт проверка…') : (mo.interval_minutes ? `интервал: ${mo.interval_minutes} мин` : 'интервал не задан')),
         h('div', { class: 'btn-group' },
@@ -739,13 +799,13 @@ async function pageDashboard(root) {
             toast(`Проверено исходников: ${r.checked ?? 0}, недоступно: ${r.unavailable ?? 0}`, (r.unavailable || 0) > 0 ? 'warning' : 'success');
             await loadExtra(); await tick();
           }) }, 'Проверить сейчас'))),
-      rs && rs.last_run ? h('div', { class: 'muted small mt-8' }, 'Последнее поднятие лотов: ', h('span', { title: fmtDate(rs.last_run) }, fmtRel(rs.last_run))) : null,
-      rp ? h('div', { class: 'muted small mt-8' }, 'Последний репрайсинг: ', rp.last_run ? h('span', { title: fmtDate(rp.last_run) }, fmtRel(rp.last_run)) : 'ещё не было',
+      rs && rs.last_run ? h('div', { class: 'muted small mt-8' }, 'Последнее поднятие лотов: ', relTime(rs.last_run)) : null,
+      rp ? h('div', { class: 'muted small mt-8' }, 'Последний репрайсинг: ', rp.last_run ? relTime(rp.last_run) : 'ещё не было',
         rp.last_result ? ` · переоценено ${rp.last_result.repriced ?? 0}` + ((rp.last_result.errors || []).length ? ` · ошибок ${rp.last_result.errors.length}` : '') : '',
         rp.enabled === false ? ' · авторепрайсинг выключен' : '') : null,
       ar ? h('div', { class: 'muted small mt-8' }, 'Автоответчик: ',
         h('span', { class: ar.active ? 'success' : ar.enabled ? 'warning' : '' }, ar.active ? 'активен' : ar.enabled ? 'включён, не активен' : 'выключен'),
-        ar.last_run ? [' · проверка ', h('span', { title: fmtDate(ar.last_run) }, fmtRel(ar.last_run))] : null,
+        ar.last_run ? [' · проверка ', relTime(ar.last_run)] : null,
         ` · ответов всего ${ar.replied_total ?? 0}`,
         lr ? ` · последняя: чатов ${lr.checked ?? 0}, ответов ${lr.replied ?? 0}` : '',
         ar.last_error ? h('span', { class: 'danger', title: ar.last_error }, ' · ошибка: ' + String(ar.last_error).slice(0, 80)) : null,
@@ -767,7 +827,17 @@ async function pageDashboard(root) {
     extra = { found, lots, events };
     renderEvents();
   };
-  const renderAll = (st) => { renderProgress(st); renderTiles(st); renderLast(st); renderMonitor(st); };
+  const renderAll = (st) => { renderProgress(st); renderTiles(st); renderLast(st); renderMonitor(st); renderOnboarding(st); };
+
+  // --- мастер первого запуска: показываем, пока не заданы ключи (или пока пользователь не скрыл его) ---
+  let settingsNow = settings;
+  const renderOnboarding = (st) => {
+    if (!settingsNow) { replace(onboardingBox); return; }
+    replace(onboardingBox, onboardingCard(st, settingsNow, profiles, {
+      focusSearch: () => { startBtn.scrollIntoView({ behavior: 'smooth', block: 'center' }); startBtn.focus(); },
+      refresh: async () => { settingsNow = await API.get('/api/settings').catch(() => settingsNow); const s2 = await loadStatus(); await loadProfiles(); renderOnboarding(s2); },
+    }));
+  };
 
   /** Один цикл опроса: статус + (после завершения поиска) пересчёт данных. */
   const tick = async () => {
@@ -791,6 +861,100 @@ async function pageDashboard(root) {
   startPolling(tick, 2000);
 }
 
+/** Ключи localStorage для мастера первого запуска. */
+const OB_KEYS = { dismissed: 'fps.onboarding.dismissed', lolzSkipped: 'fps.onboarding.lolzSkipped' };
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* приватный режим */ } }
+
+/** Карточка «Первый запуск — 3 шага»: golden_key + User-Agent -> токен Lolz (можно пропустить) -> профили и поиск. */
+function onboardingCard(st, settings, profiles, ctx) {
+  const fp = settings.funpay || {}, lz = settings.lolz || {};
+  const auth = st.auth || {};
+  const funpayDone = !!fp.golden_key_set;
+  const lolzSkipped = lsGet(OB_KEYS.lolzSkipped) === '1';
+  const lolzDone = !!lz.token_set || lolzSkipped;
+  const enabled = profiles.filter(p => p.enabled).length;
+  const profilesDone = funpayDone && enabled > 0 && !!(st.search && (st.search.last_finished || (st.search.last || []).length));
+  if (lsGet(OB_KEYS.dismissed) === '1' || (funpayDone && lolzDone)) return null;
+  const current = !funpayDone ? 1 : !lolzDone ? 2 : 3;
+  const doneCount = [funpayDone, lolzDone, profilesDone].filter(Boolean).length;
+
+  const step = (n, title, done, badge, help, body) => h('section', { class: 'ob-step' + (done ? ' done' : n === current ? ' current' : ''), 'aria-label': `Шаг ${n}: ${title}`, 'aria-current': n === current ? 'step' : null },
+    h('span', { class: 'ob-num', 'aria-hidden': 'true' }, done ? '✓' : n),
+    h('div', { class: 'ob-title' }, title, badge),
+    help ? h('div', { class: 'ob-help' }, help) : null,
+    body ? h('div', { class: 'ob-body' }, body) : null);
+
+  // --- шаг 1: FunPay ---
+  const fpModel = { golden_key: '', user_agent: fp.user_agent || '' };
+  const uaInput = h('input', { class: 'input', placeholder: 'User-Agent браузера, где выполнен вход', value: fpModel.user_agent, 'aria-label': 'User-Agent', oninput: (e) => { fpModel.user_agent = e.target.value; } });
+  const keyInput = h('input', { class: 'input mono', type: 'password', autocomplete: 'off', placeholder: 'значение cookie golden_key', 'aria-label': 'golden_key', oninput: (e) => { fpModel.golden_key = e.target.value; } });
+  const fpResult = h('div');
+  const saveFunpay = async () => {
+    const key = fpModel.golden_key.trim();
+    if (!key) { keyInput.focus(); throw new Error('Вставьте значение cookie golden_key'); }
+    if (!fpModel.user_agent.trim()) { uaInput.focus(); throw new Error('Укажите User-Agent (кнопка «Вставить мой User-Agent», если вход выполнен в этом браузере)'); }
+    await API.put('/api/settings', { funpay: { golden_key: key, user_agent: fpModel.user_agent.trim() } });
+    const r = await API.post('/api/auth/check', { sources: ['funpay'] });
+    const a = r.funpay || {};
+    if (a.ok) { toast('FunPay подключён' + (a.username ? ' как ' + a.username : ''), 'success'); await ctx.refresh(); }
+    else replace(fpResult, h('div', { class: 'result-box bad small' }, h('span', { class: 'dot bad' }), ' ', h('span', { class: 'danger' }, 'Ключ сохранён, но вход не удался: ' + (a.error || 'нет доступа')), h('div', { class: 'muted mt-8' }, 'Проверьте, что cookie скопирован целиком и User-Agent взят из того же браузера.')));
+  };
+  const fpBody = funpayDone ? null : [
+    keyInput,
+    h('div', { class: 'input-group' }, uaInput, h('button', { type: 'button', class: 'btn btn-sm', title: 'Подставить User-Agent этого браузера', onclick: () => { fpModel.user_agent = navigator.userAgent; uaInput.value = navigator.userAgent; } }, 'Вставить мой User-Agent')),
+    h('div', { class: 'ob-actions' }, h('button', { type: 'button', class: 'btn btn-primary', onclick: (e) => busy(e.currentTarget, saveFunpay) }, 'Сохранить и проверить'), h('a', { class: 'small', href: '#/settings' }, 'все настройки FunPay →')),
+    fpResult,
+  ];
+  const fpBadge = funpayDone ? h('span', { class: 'chip success' }, auth.funpay && auth.funpay.ok && auth.funpay.username ? 'подключено: ' + auth.funpay.username : 'ключ сохранён') : null;
+  const fpHelp = funpayDone ? 'Доступ к FunPay настроен.' : [
+    'Нужны cookie ', h('code', {}, 'golden_key'), ' и User-Agent того же браузера:',
+    h('ol', {}, h('li', {}, 'Войдите на ', h('a', { href: 'https://funpay.com', target: '_blank', rel: 'noopener' }, 'funpay.com'), ' в браузере.'),
+      h('li', {}, 'Нажмите ', h('kbd', {}, 'F12'), ' → вкладка ', h('b', {}, 'Application'), ' (в Firefox — «Хранилище») → ', h('b', {}, 'Cookies'), ' → ', h('b', {}, 'https://funpay.com'), '.'),
+      h('li', {}, 'Скопируйте значение ', h('code', {}, 'golden_key'), ' и вставьте ниже.'))];
+
+  // --- шаг 2: Lolz ---
+  const lzModel = { token: '' };
+  const lzInput = h('input', { class: 'input mono', type: 'password', autocomplete: 'off', placeholder: 'API-токен Lolzteam Market', 'aria-label': 'Токен Lolz', oninput: (e) => { lzModel.token = e.target.value; } });
+  const lzResult = h('div');
+  const saveLolz = async () => {
+    const token = lzModel.token.trim();
+    if (!token) { lzInput.focus(); throw new Error('Вставьте токен или нажмите «Пропустить»'); }
+    await API.put('/api/settings', { lolz: { token } });
+    const r = await API.post('/api/auth/check', { sources: ['lolz'] });
+    const a = r.lolz || {};
+    if (a.ok) { toast('Lolz подключён' + (a.username ? ' как ' + a.username : ''), 'success'); await ctx.refresh(); }
+    else replace(lzResult, h('div', { class: 'result-box bad small' }, h('span', { class: 'dot bad' }), ' ', h('span', { class: 'danger' }, 'Токен сохранён, но вход не удался: ' + (a.error || 'нет доступа'))));
+  };
+  const lzBody = lolzDone ? (lolzSkipped && !lz.token_set ? h('div', { class: 'ob-actions' }, h('button', { type: 'button', class: 'btn btn-sm btn-ghost', onclick: () => { lsSet(OB_KEYS.lolzSkipped, null); ctx.refresh(); } }, 'Всё-таки настроить')) : null) : [
+    lzInput,
+    h('div', { class: 'ob-actions' },
+      h('button', { type: 'button', class: 'btn ' + (current === 2 ? 'btn-primary' : ''), disabled: current < 2, onclick: (e) => busy(e.currentTarget, saveLolz) }, 'Сохранить и проверить'),
+      h('button', { type: 'button', class: 'btn btn-ghost', title: 'Поиск будет идти только по FunPay; токен можно добавить позже в настройках', onclick: () => { lsSet(OB_KEYS.lolzSkipped, '1'); toast('Lolz пропущен — поиск только по FunPay'); ctx.refresh(); } }, 'Пропустить')),
+    lzResult,
+  ];
+  const lzBadge = lz.token_set ? h('span', { class: 'chip success' }, auth.lolz && auth.lolz.ok && auth.lolz.username ? 'подключено: ' + auth.lolz.username : 'токен сохранён') : lolzSkipped ? h('span', { class: 'chip neutral' }, 'пропущено') : h('span', { class: 'chip neutral' }, 'необязательно');
+  const lzHelp = lz.token_set ? 'Второй источник объявлений подключён.' : ['Второй источник объявлений — ', h('a', { href: 'https://lzt.market', target: '_blank', rel: 'noopener' }, 'lzt.market'), '. Токен выдаётся на ', h('a', { href: 'https://lolz.team/account/api', target: '_blank', rel: 'noopener' }, 'lolz.team/account/api'), ' (права: market). Без него поиск идёт только по FunPay.'];
+
+  // --- шаг 3: профили и поиск ---
+  const prBody = h('div', { class: 'ob-actions' },
+    h('a', { class: 'btn ' + (current === 3 && !enabled ? 'btn-primary' : ''), href: '#/profiles' }, enabled ? 'Профили →' : 'Открыть профили →'),
+    h('button', { type: 'button', class: 'btn ' + (current === 3 && enabled ? 'btn-primary' : ''), disabled: current < 3 || !enabled, title: enabled ? 'Перейти к кнопке поиска' : 'Сначала включите хотя бы один профиль', onclick: ctx.focusSearch }, 'К поиску ↓'));
+  const prHelp = [`Включено профилей: ${enabled} из ${profiles.length}. `, 'Профиль задаёт игру, критерии отбора и наценку. Включите нужные (или создайте свой) и нажмите большую синюю кнопку поиска на панели — находки появятся в разделе «Найдено».'];
+
+  return h('div', { class: 'card onboarding', role: 'region', 'aria-label': 'Первый запуск' },
+    h('div', { class: 'card-header' },
+      h('div', {}, h('h2', {}, '👋 Первый запуск — 3 шага'), h('div', { class: 'muted small' }, 'Подключите площадки, включите профили — и можно искать аккаунты. Займёт пару минут.')),
+      h('button', { type: 'button', class: 'btn btn-ghost btn-sm', title: 'Карточку можно вернуть, очистив данные сайта в браузере', onclick: () => { lsSet(OB_KEYS.dismissed, '1'); ctx.refresh(); toast('Мастер скрыт. Ключи можно задать в Настройках'); } }, 'Скрыть, я настрою позже')),
+    h('div', { class: 'ob-steps' },
+      step(1, 'Доступ к FunPay', funpayDone, fpBadge, fpHelp, fpBody),
+      step(2, 'Токен Lolz', lolzDone, lzBadge, lzHelp, lzBody),
+      step(3, 'Профили и поиск', profilesDone, null, prHelp, prBody)),
+    h('div', { class: 'ob-foot' },
+      h('div', { class: 'ob-progress' }, h('div', { class: 'progress', role: 'progressbar', 'aria-valuenow': doneCount, 'aria-valuemin': 0, 'aria-valuemax': 3, 'aria-label': 'Прогресс настройки' }, h('span', { style: `width:${Math.round(doneCount / 3 * 100)}%` })), `${doneCount} из 3`),
+      h('div', { class: 'muted small' }, 'Ключи хранятся только на этом компьютере в ', h('code', {}, 'config/settings.yaml'))));
+}
+
 // ----------------------------------------------------------------------------
 // 6.2 Найдено
 // ----------------------------------------------------------------------------
@@ -805,7 +969,7 @@ async function pageFound(root) {
   const countEl = h('span', { class: 'muted small' });
 
   const load = async () => {
-    replace(listBox, loadingState());
+    replace(listBox, skeletonList(4, 'card'));
     try {
       items = await API.get('/api/found' + qs({ profile_id: filters.profile_id, status: [...filters.statuses].join(',') || null, source: filters.source, order: filters.order, limit: 200 }));
     } catch (e) { replace(listBox, emptyState('Ошибка загрузки', e.message, '⚠')); return; }
@@ -830,6 +994,7 @@ async function pageFound(root) {
         toast('Скрыто: ' + selected.size); selected.clear(); await load();
       }) }, 'Скрыть выбранные'),
       h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { selected.clear(); renderList(); } }, 'Снять выделение'));
+    bulkBar.setAttribute('role', 'toolbar'); bulkBar.setAttribute('aria-label', 'Действия с выбранными');
   };
   const renderList = () => {
     const list = visible();
@@ -850,11 +1015,11 @@ async function pageFound(root) {
       h('select', { class: 'select', value: '', onchange: (e) => { filters.source = e.target.value; load(); } }, h('option', { value: '' }, 'Все источники'), h('option', { value: 'funpay' }, 'FunPay'), h('option', { value: 'lolz' }, 'Lolz')),
       h('select', { class: 'select', value: 'score', onchange: (e) => { filters.order = e.target.value; load(); } },
         h('option', { value: 'score' }, 'Сортировка: по баллам'), h('option', { value: 'price' }, 'Сортировка: по цене'), h('option', { value: 'first_seen' }, 'Сортировка: сначала новые'), h('option', { value: 'suggested_price' }, 'Сортировка: по нашей цене')),
-      h('input', { class: 'input grow', type: 'search', placeholder: 'Поиск по названию, продавцу, региону…', oninput: debounce((e) => { filters.q = e.target.value; renderList(); }, 150) })),
+      h('input', { class: 'input grow', type: 'search', placeholder: 'Поиск по названию, продавцу, региону…', 'aria-label': 'Текстовый фильтр (клавиша /)', title: 'Клавиша / — перейти к поиску', oninput: debounce((e) => { filters.q = e.target.value; renderList(); }, 150) })),
     h('div', { class: 'filters' }, h('span', { class: 'label' }, 'Статус:'), chipToggles(statusOpts, filters.statuses, load)),
     bulkBar, listBox);
   bulkBar.hidden = true;
-  await load();
+  load();   // не ждём: страница монтируется сразу со скелетоном, список подгружается следом
 }
 
 /** Карточка найденного объявления. */
@@ -881,7 +1046,7 @@ function foundCard(f, ctx) {
     }),
   ];
   const card = h('div', { class: 'found-card' + (checked ? ' selected' : ''), dataset: { id: f.id } },
-    h('label', { class: 'check' }, h('input', { type: 'checkbox', checked, 'aria-label': 'Выбрать', onchange: (e) => { e.target.checked ? ctx.selected.add(f.id) : ctx.selected.delete(f.id); card.classList.toggle('selected', e.target.checked); ctx.onSelect(); } })),
+    h('label', { class: 'check' }, h('input', { type: 'checkbox', checked, 'aria-label': 'Выбрать объявление', onchange: (e) => { e.target.checked ? ctx.selected.add(f.id) : ctx.selected.delete(f.id); card.classList.toggle('selected', e.target.checked); ctx.onSelect(); } })),
     h('div', { class: 'found-main' },
       h('div', { class: 'row' }, sourceChip(l.source), statusChip(f.status, FOUND_STATUS),
         l.region ? h('span', { class: 'chip soft' }, l.region) : null,
@@ -892,7 +1057,7 @@ function foundCard(f, ctx) {
       h('div', { class: 'found-meta' },
         l.seller_name ? (l.seller_url ? h('a', { href: l.seller_url, target: '_blank', rel: 'noopener' }, '👤 ' + l.seller_name) : h('span', {}, '👤 ' + l.seller_name)) : null,
         availIndicator(f.available, f.last_checked),
-        h('span', { title: 'Первое обнаружение: ' + fmtDate(f.first_seen) + '\nПоследнее: ' + fmtDate(f.last_seen) }, 'найдено ' + fmtRel(f.first_seen)),
+        h('time', { datetime: f.first_seen || '', title: 'Первое обнаружение: ' + fmtDate(f.first_seen) + '\nПоследнее: ' + fmtDate(f.last_seen) }, 'найдено ' + fmtRel(f.first_seen)),
         h('a', { href: l.url, target: '_blank', rel: 'noopener' }, 'Открыть источник ↗'))),
     h('div', { class: 'found-side' },
       h('div', { class: 'price-block' }, h('div', { class: 'price-src' }, 'Исходник: ' + fmtMoney(l.price, l.currency)),
@@ -912,7 +1077,7 @@ async function pageLots(root) {
   const countEl = h('span', { class: 'muted small' });
 
   const load = async () => {
-    replace(tableBox, loadingState());
+    replace(tableBox, skeletonList(4, 'row'));
     let lots;
     try { lots = await API.get('/api/lots' + qs({ status: [...filters.statuses].join(',') || null })); }
     catch (e) { replace(tableBox, emptyState('Ошибка загрузки', e.message, '⚠')); return; }
@@ -930,20 +1095,21 @@ async function pageLots(root) {
         h('button', { class: 'btn', onclick: load }, '⟳ Обновить'))),
     h('div', { class: 'filters' }, h('span', { class: 'label' }, 'Статус:'), chipToggles(statusOpts, filters.statuses, load)),
     tableBox);
-  await load();
+  load();   // не ждём: сначала скелетон, затем таблица
 }
 
 function lotRow(lot, reload) {
   const margin = (lot.price || 0) - (lot.source_price || 0);
   const marginPct = lot.source_price ? margin / lot.source_price * 100 : null;
-  const act = (label, cls, url, okMsg) => h('button', { class: 'btn btn-sm ' + cls, onclick: (e) => busy(e.currentTarget, async () => {
+  const act = (label, cls, url, okMsg, confirmText) => h('button', { class: 'btn btn-sm ' + cls, onclick: (e) => busy(e.currentTarget, async () => {
+    if (confirmText && !(await confirmDialog(confirmText, { ok: label }))) return;
     const r = await API.post(`/api/lots/${lot.id}/${url}`);
     toast(r.status === 'error' ? `Ошибка: ${r.error || 'неизвестно'}` : okMsg, r.status === 'error' ? 'error' : 'success'); reload(); loadStatus().catch(() => {});
   }) }, label);
   const actions = [];
   if (lot.status === 'draft' || lot.status === 'error') actions.push(act('Опубликовать', 'btn-primary', 'publish', 'Лот опубликован'));
   if (lot.status === 'draft' || lot.status === 'error' || lot.status === 'deactivated') actions.push(h('button', { class: 'btn btn-sm', onclick: () => openLotEdit(lot, reload) }, 'Редактировать'));
-  if (lot.status === 'active') { actions.push(act('Снять', '', 'deactivate', 'Лот снят с продажи')); actions.push(act('Проверить исходник', '', 'check', 'Исходник проверен')); }
+  if (lot.status === 'active') { actions.push(act('Проверить исходник', '', 'check', 'Исходник проверен')); actions.push(act('Снять', 'btn-danger', 'deactivate', 'Лот снят с продажи', `Снять лот #${lot.id} с продажи на FunPay? Его можно будет активировать снова.`)); }
   if (lot.status === 'deactivated') actions.push(act('Активировать', 'btn-success', 'activate', 'Лот активирован'));
   actions.push(h('button', { class: 'btn btn-sm btn-danger', onclick: (e) => busy(e.currentTarget, async () => {
     if (!(await confirmDialog(`Удалить лот #${lot.id}?${lot.status === 'active' ? ' Он активен на FunPay.' : ''}`, { ok: 'Удалить' }))) return;
@@ -953,7 +1119,7 @@ function lotRow(lot, reload) {
     h('td', {}, statusChip(lot.status, LOT_STATUS)),
     h('td', { class: 'cell-title' },
       h('div', { class: 'bold ellipsis', title: lot.title_ru }, lot.title_ru || '(без заголовка)'),
-      h('div', { class: 'muted small' }, '#' + lot.id, lot.profile_name ? ' · ' + lot.profile_name : '', ' · ', fmtRel(lot.updated_at), priceChangedChip(lot)),
+      h('div', { class: 'muted small' }, '#' + lot.id, lot.profile_name ? ' · ' + lot.profile_name : '', ' · ', relTime(lot.updated_at), priceChangedChip(lot)),
       h('div', { class: 'small links' }, lot.funpay_url ? [extLink(lot.funpay_url, 'на FunPay ↗'), ' · '] : null, extLink(lot.source_url, 'исходник ↗'), lot.seller_url ? [' · ', extLink(lot.seller_url, 'продавец ↗')] : null),
       lot.error ? h('div', { class: 'danger small' }, lot.error) : null),
     h('td', { class: 'num' }, h('div', { class: 'bold' }, fmtMoney(lot.price)), h('div', { class: 'small muted nowrap' }, 'из ' + fmtMoney(lot.source_price))),
@@ -1073,9 +1239,18 @@ async function pageProfileEditor(root, id) {
   };
 
   const tabs = [['main', 'Основное'], ['sources', 'Источники'], ['criteria', 'Критерии'], ['pricing', 'Наценка'], ['template', 'Шаблон лота']];
-  const tabsEl = h('div', { class: 'tabs', role: 'tablist' }, tabs.map(([key, label]) => h('button', { class: 'tab' + (key === tab ? ' active' : ''), role: 'tab', dataset: { tab: key }, onclick: () => { tab = key; renderTab(); } }, label)));
+  const tabsEl = h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Разделы профиля' }, tabs.map(([key, label]) => h('button', { type: 'button', class: 'tab' + (key === tab ? ' active' : ''), role: 'tab', id: 'tab-' + key, 'aria-controls': 'tabpanel-profile', 'aria-selected': key === tab ? 'true' : 'false', tabindex: key === tab ? '0' : '-1', dataset: { tab: key }, onclick: () => { tab = key; renderTab(); } }, label)));
+  // стрелки влево/вправо, Home/End переключают вкладки с клавиатуры
+  tabsEl.addEventListener('keydown', (e) => {
+    const keys = tabs.map(t => t[0]); const i = keys.indexOf(tab);
+    const next = e.key === 'ArrowRight' ? keys[(i + 1) % keys.length] : e.key === 'ArrowLeft' ? keys[(i - 1 + keys.length) % keys.length] : e.key === 'Home' ? keys[0] : e.key === 'End' ? keys[keys.length - 1] : null;
+    if (!next) return;
+    e.preventDefault(); tab = next; renderTab(); tabsEl.querySelector('#tab-' + next).focus();
+  });
+  tabBox.id = 'tabpanel-profile'; tabBox.setAttribute('role', 'tabpanel');
   const renderTab = () => {
-    tabsEl.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    tabsEl.querySelectorAll('.tab').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('active', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); b.tabIndex = on ? 0 : -1; });
+    tabBox.setAttribute('aria-labelledby', 'tab-' + tab);
     const render = { main: tabMain, sources: tabSources, criteria: tabCriteria, pricing: tabPricing, template: tabTemplate }[tab];
     replace(tabBox, render());
   };
@@ -1277,7 +1452,7 @@ async function pageOrders(root) {
   const listBox = h('div', { class: 'found-list' });
   const countEl = h('span', { class: 'muted small' });
   const load = async () => {
-    replace(listBox, loadingState());
+    replace(listBox, skeletonList(3, 'card'));
     let orders;
     try { orders = await API.get('/api/orders' + qs({ status: [...filters.statuses].join(',') || null, limit: 200 })); }
     catch (e) { replace(listBox, emptyState('Ошибка загрузки', e.message, '⚠')); return; }
@@ -1298,7 +1473,7 @@ async function pageOrders(root) {
         h('button', { class: 'btn', onclick: load }, 'Обновить'))),
     h('div', { class: 'filters' }, h('span', { class: 'label' }, 'Статус:'), chipToggles(statusOpts, filters.statuses, load)),
     listBox);
-  await load();
+  load();   // не ждём: сначала скелетон, затем карточки заказов
 }
 
 /** Карточка заказа: статус, покупатель, ссылка на заказ, где купить исходник, маржа, заметка. */
@@ -1316,7 +1491,7 @@ function orderCard(o) {
   return h('div', { class: 'order-card' + (o.status === 'paid' ? ' paid' : '') },
     h('div', { class: 'found-main' },
       h('div', { class: 'row' }, statusChip(o.status, ORDER_STATUS), o.subcategory_name ? h('span', { class: 'chip soft' }, o.subcategory_name) : null,
-        h('span', { class: 'muted small', title: fmtDate(when) }, fmtRel(when)), h('span', { class: 'muted small mono' }, '#' + o.funpay_order_id)),
+        h('span', { class: 'muted small' }, relTime(when)), h('span', { class: 'muted small mono' }, '#' + o.funpay_order_id)),
       h('div', { class: 'found-title' }, o.title || '(без названия)'),
       h('div', { class: 'found-meta' },
         o.buyer_name ? (o.buyer_url ? h('a', { href: o.buyer_url, target: '_blank', rel: 'noopener' }, '👤 ' + o.buyer_name) : h('span', {}, '👤 ' + o.buyer_name)) : null,
@@ -1353,7 +1528,7 @@ async function pageChat(root) {
       h('span', {}, h('b', {}, 'Автоответчик: '), a
         ? h('span', { class: a.active ? 'success' : a.enabled ? 'warning' : 'muted' }, a.active ? 'вкл' : a.enabled ? 'вкл, не активен' : 'выкл')
         : h('span', { class: 'muted' }, 'недоступен')),
-      a ? h('span', { class: 'muted' }, '· последняя проверка ', a.last_run ? h('span', { title: fmtDate(a.last_run) }, fmtRel(a.last_run)) : 'ещё не было') : null,
+      a ? h('span', { class: 'muted' }, '· последняя проверка ', a.last_run ? relTime(a.last_run) : 'ещё не было') : null,
       a ? h('span', { class: 'muted' }, `· ответов всего ${a.replied_total ?? 0}`) : null,
       a && a.keywords != null ? h('span', { class: 'muted' }, `· правил: ${a.keywords}`) : null,
       a && a.last_error ? h('span', { class: 'danger small', title: a.last_error }, '· ошибка: ' + String(a.last_error).slice(0, 60)) : null,
@@ -1448,7 +1623,7 @@ async function pageChat(root) {
     statusBar,
     h('div', { class: 'chat-layout' },
       h('div', { class: 'chat-list' },
-        h('div', { class: 'search' }, h('input', { class: 'input sm', type: 'search', placeholder: 'Поиск по имени или тексту…', oninput: (e) => { q = e.target.value; renderList(); } })),
+        h('div', { class: 'search' }, h('input', { class: 'input sm', type: 'search', placeholder: 'Поиск по имени или тексту…', 'aria-label': 'Поиск по чатам (клавиша /)', oninput: (e) => { q = e.target.value; renderList(); } })),
         listBox),
       paneBox));
   renderStatus(state.status);
@@ -1470,7 +1645,20 @@ async function pageSettings(root) {
   model.autoreply = model.autoreply || { enabled: false, poll_seconds: 15, reply_once_per_chat_hours: 12, greeting: '', keywords: {}, ignore_if_online_minutes: 0 };
   model.autoreply.keywords = model.autoreply.keywords || {};
   const secrets = { golden_key: '', token: '', bot_token: '' };
-  const authBox = h('div'), tgBox = h('div'), replyBox = h('div');
+  const authBox = h('div'), tgBox = h('div'), replyBox = h('div'), diagBox = h('div');
+  // диагностика: длинный GET, результат — список проверок с подсказками и путём к папке отчёта
+  const diag = { funpay: true, lolz: true };
+  const runDiagnostics = async () => {
+    replace(diagBox, h('div', { class: 'page-loading', role: 'status' }, h('span', { class: 'spinner' }), ' Идёт диагностика — проверяем сеть и площадки, это может занять до минуты…'));
+    let r;
+    try { r = await API.get('/api/diagnostics/run' + qs({ funpay: diag.funpay ? 1 : 0, lolz: diag.lolz ? 1 : 0 })); }
+    catch (e) {
+      replace(diagBox);
+      if (e.status === 404 || e.status === 501) { toast('Диагностика недоступна в этой версии приложения', 'warning'); return; }
+      throw e;
+    }
+    replace(diagBox, diagnosticsReport(r));
+  };
   // тестер автоответчика: сообщение покупателя -> ответ по сохранённым правилам
   const tester = { text: '' };
   const runReplyPreview = async () => {
@@ -1555,6 +1743,12 @@ async function pageSettings(root) {
         field('Название', textInput(model, 'ui.brand')),
         field('Порт', numberInput(model, 'ui.port', { step: 1, min: 1 }), 'Применится после перезапуска'),
         h('div', { class: 'field' }, h('label', {}, ' '), checkInput(model, 'ui.open_browser', 'Открывать браузер при запуске')))),
+    h('div', { class: 'card' }, h('div', { class: 'card-header' }, h('div', {}, h('h2', {}, '🩺 Диагностика'), h('div', { class: 'muted small' }, 'Проверяет окружение, сеть, доступ к FunPay и Lolz, форму лота; отчёт сохраняется в папку данных')),
+      h('div', { class: 'row' },
+        h('label', { class: 'check small' }, h('input', { type: 'checkbox', checked: true, onchange: (e) => { diag.funpay = e.target.checked; } }), 'FunPay'),
+        h('label', { class: 'check small' }, h('input', { type: 'checkbox', checked: true, onchange: (e) => { diag.lolz = e.target.checked; } }), 'Lolz'),
+        h('button', { class: 'btn btn-primary', onclick: (e) => busy(e.currentTarget, runDiagnostics) }, 'Запустить диагностику'))),
+      diagBox),
     h('div', { class: 'card' }, h('div', { class: 'card-header' }, h('h2', {}, 'Проверка подключения'),
       h('button', { class: 'btn', onclick: (e) => busy(e.currentTarget, async () => {
         const r = await API.post('/api/auth/check');
@@ -1578,6 +1772,24 @@ async function pageSettings(root) {
     h('div', { class: 'page-header' }, h('div', {}, h('h1', {}, 'Настройки'), h('div', { class: 'sub' }, 'Доступы к площадкам, мониторинг и интерфейс')),
       h('div', { class: 'page-actions' }, h('button', { class: 'btn btn-primary', onclick: (e) => busy(e.currentTarget, save) }, 'Сохранить'))),
     form);
+}
+
+/** Отчёт диагностики: ✅ ok / ❌ ошибка / ⏭ пропущено, подсказки и папка с отчётом. */
+function diagnosticsReport(r) {
+  const checks = Array.isArray(r && r.checks) ? r.checks : [];
+  const icon = (ok) => ok === true ? ['✅', 'успешно', 'ok'] : ok === false ? ['❌', 'ошибка', 'bad'] : ['⏭', 'пропущено', 'skip'];
+  const nOk = checks.filter(c => c.ok === true).length, nBad = checks.filter(c => c.ok === false).length, nSkip = checks.length - nOk - nBad;
+  return h('div', {},
+    h('div', { class: 'diag-summary' },
+      h('span', { class: 'chip ' + (nBad ? 'danger' : 'success') }, nBad ? `ошибок: ${nBad}` : 'всё в порядке'),
+      h('span', { class: 'chip success soft' }, `✅ ${nOk}`), nSkip ? h('span', { class: 'chip neutral' }, `⏭ ${nSkip}`) : null,
+      r.summary ? h('span', { class: 'muted small' }, r.summary) : null),
+    checks.length ? h('div', { class: 'diag-list', role: 'list' }, checks.map(c => { const [ic, label, cls] = icon(c.ok); return h('div', { class: 'diag-row ' + cls, role: 'listitem' },
+      h('span', { class: 'diag-icon', role: 'img', 'aria-label': label }, ic),
+      h('div', {}, h('div', { class: 'diag-name' }, c.name || '—'), c.details ? h('div', { class: 'diag-details' }, c.details) : null, c.hint ? h('div', { class: 'diag-hint' }, '💡 ' + c.hint) : null),
+      h('span', { class: 'diag-ms' }, c.elapsed_ms != null ? fmtNum(c.elapsed_ms) + ' мс' : '')); })) : emptyState('Проверок нет'),
+    r.saved_to ? h('div', { class: 'diag-path' }, 'Отчёт сохранён в папку: ', h('code', { title: 'Выделите и скопируйте путь' }, r.saved_to),
+      h('button', { type: 'button', class: 'btn btn-sm btn-ghost', onclick: async () => { try { await navigator.clipboard.writeText(r.saved_to); toast('Путь скопирован', 'success', 2000); } catch (e) { toast('Не удалось скопировать — выделите путь вручную', 'warning'); } } }, 'Копировать путь')) : null);
 }
 
 // ----------------------------------------------------------------------------
@@ -1607,12 +1819,13 @@ async function pageLog(root) {
         h('td', {}, ev.message, ev.data && Object.keys(ev.data).length ? h('details', { class: 'log-data' }, h('summary', {}, 'данные'), h('pre', {}, JSON.stringify(ev.data, null, 2))) : null)))))));
   };
   const load = async () => { events = await API.get('/api/events' + qs({ limit: 200 })); renderTable(); };
+  replace(tableBox, skeletonList(6, 'row'));
   append(root,
     h('div', { class: 'page-header' }, h('div', {}, h('h1', {}, 'Журнал'), h('div', { class: 'sub' }, 'События приложения, обновляется каждые 5 секунд')),
       h('div', { class: 'page-actions' }, countEl, h('button', { class: 'btn', onclick: (e) => busy(e.currentTarget, load) }, '⟳ Обновить'))),
     h('div', { class: 'filters' }, kindSel, h('span', { class: 'label' }, 'Уровень:'), chipToggles(levelOpts, filters.levels, renderTable)),
     tableBox);
-  await load();
+  load().catch(e => replace(tableBox, emptyState('Ошибка загрузки', e.message, '⚠')));   // не ждём: сначала скелетон
   startPolling(load, 5000);
 }
 
@@ -1620,8 +1833,58 @@ async function pageLog(root) {
 // Запуск
 // ----------------------------------------------------------------------------
 
+/** Окно «Горячие клавиши». */
+function openShortcutsModal() {
+  const row = (keys, text) => h('tr', {}, h('td', {}, keys.map((k, i) => [i ? ' ' : null, h('kbd', {}, k)])), h('td', {}, text));
+  openModal({ title: 'Горячие клавиши', size: 'sm', body: h('table', { class: 'kbd-table' }, h('tbody', {},
+    row(['/'], 'Перейти к поиску на странице (Найдено, Чаты)'),
+    row(['Esc'], 'Закрыть окно или подсказку'),
+    row(['?'], 'Показать это окно'),
+    row(['Ctrl', 'Enter'], 'Отправить сообщение в чате'),
+    row(['Enter'], 'Добавить тег в поле со списком слов'),
+    row(['←', '→'], 'Переключить вкладку в редакторе профиля'),
+    row(['Tab'], 'Перемещение по элементам, фокус не выходит за пределы окна'))) });
+}
+/** Окно «О программе»: версия из /api/status, ссылки на документацию API. */
+function openAboutModal() {
+  const st = state.status || {};
+  openModal({ title: 'О программе', size: 'sm', body: [
+    h('div', { class: 'about-logo' }, h('span', { 'aria-hidden': 'true', html: '<svg viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="currentColor" opacity=".18"/><circle cx="14" cy="14" r="6.5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M19 19l6 6" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>' }),
+      h('div', {}, h('div', { class: 'bold', style: 'font-size:16px' }, st.brand || 'FunPay Searcher'), h('div', { class: 'muted small' }, 'поиск аккаунтов и перепродажа на FunPay'))),
+    h('dl', { class: 'about-grid' },
+      h('dt', {}, 'Версия'), h('dd', { class: 'mono' }, st.version ? 'v' + st.version : '—'),
+      h('dt', {}, 'Интерфейс'), h('dd', {}, h('a', { href: location.origin }, location.host)),
+      h('dt', {}, 'API'), h('dd', {}, h('a', { href: '/api/docs', target: '_blank', rel: 'noopener' }, '/api/docs ↗'), ' · ', h('a', { href: '/api/status', target: '_blank', rel: 'noopener' }, '/api/status ↗')),
+      h('dt', {}, 'Данные'), h('dd', { class: 'small' }, 'config/settings.yaml, config/profiles/, data/app.db — рядом с программой'),
+      h('dt', {}, 'Клавиши'), h('dd', {}, h('button', { type: 'button', class: 'btn btn-sm', onclick: () => openShortcutsModal() }, 'Горячие клавиши'))),
+  ] });
+}
+/** Глобальные клавиши: «/» — к поиску на странице, «?» — подсказка, Esc — закрыть верхнее окно. */
+function isTyping(el) { return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable); }
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab' && modalStack.length) { trapModalTab(e); return; }
+  if (e.key === 'Escape') {
+    if (closeTopModal()) { e.preventDefault(); return; }
+    const open = document.querySelector('details.dropdown[open]'); if (open) { open.open = false; return; }
+    if (isTyping(e.target) && e.target.type === 'search' && e.target.value) { e.target.value = ''; e.target.dispatchEvent(new Event('input')); }
+    return;
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
+  if (e.key === '/') {
+    const search = $('#main input[type="search"]');
+    if (search) { e.preventDefault(); search.focus(); search.select(); }
+  } else if (e.key === '?') {
+    if (modalStack.length) return;
+    e.preventDefault(); openShortcutsModal();
+  }
+});
+
 window.addEventListener('hashchange', navigate);
-window.addEventListener('DOMContentLoaded', navigate);
+window.addEventListener('DOMContentLoaded', () => {
+  $('#about-btn').addEventListener('click', openAboutModal);
+  $('#kbd-btn').addEventListener('click', openShortcutsModal);
+  navigate();
+});
 // Закрываем открытые выпадающие списки (<details class="dropdown">) при клике вне их
 document.addEventListener('click', (e) => {
   document.querySelectorAll('details.dropdown[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; });

@@ -19,54 +19,54 @@
         <span class="brand-name" id="brand-name">FunPay Searcher</span>
       </div>
 
-      <nav class="nav" id="nav">
-        <a class="nav-item" href="#/dashboard" data-route="dashboard">
+      <nav class="nav" id="nav" aria-label="Разделы">
+        <a class="nav-item" href="#/dashboard" data-route="dashboard" data-label="Панель">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
           </span>
           <span class="nav-label">Панель</span>
         </a>
-        <a class="nav-item" href="#/found" data-route="found">
+        <a class="nav-item" href="#/found" data-route="found" data-label="Найдено">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
           </span>
           <span class="nav-label">Найдено</span>
-          <span class="nav-badge" id="badge-candidates" hidden>0</span>
+          <span class="nav-badge" id="badge-candidates" aria-label="Кандидатов" hidden>0</span>
         </a>
-        <a class="nav-item" href="#/lots" data-route="lots">
+        <a class="nav-item" href="#/lots" data-route="lots" data-label="Лоты">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M20 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
           </span>
           <span class="nav-label">Лоты</span>
-          <span class="nav-badge" id="badge-lots" hidden>0</span>
+          <span class="nav-badge" id="badge-lots" aria-label="Активных лотов" hidden>0</span>
         </a>
-        <a class="nav-item" href="#/orders" data-route="orders">
+        <a class="nav-item" href="#/orders" data-route="orders" data-label="Продажи">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M6 2h12l1 5H5z"/><path d="M5 7v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7"/><path d="M9 11h6M9 15h4"/></svg>
           </span>
           <span class="nav-label">Продажи</span>
-          <span class="nav-badge" id="badge-orders" hidden>0</span>
+          <span class="nav-badge" id="badge-orders" aria-label="Заказов к выполнению" hidden>0</span>
         </a>
-        <a class="nav-item" href="#/chat" data-route="chat">
+        <a class="nav-item" href="#/chat" data-route="chat" data-label="Чаты">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H8l-5 3 1.2-4.2A8 8 0 1 1 21 12z"/><path d="M8 11h8M8 14h5"/></svg>
           </span>
           <span class="nav-label">Чаты</span>
-          <span class="nav-badge" id="badge-chats" hidden>0</span>
+          <span class="nav-badge" id="badge-chats" aria-label="Непрочитанных чатов" hidden>0</span>
         </a>
-        <a class="nav-item" href="#/profiles" data-route="profiles">
+        <a class="nav-item" href="#/profiles" data-route="profiles" data-label="Профили">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/><circle cx="18" cy="17" r="3"/></svg>
           </span>
           <span class="nav-label">Профили</span>
         </a>
-        <a class="nav-item" href="#/settings" data-route="settings">
+        <a class="nav-item" href="#/settings" data-route="settings" data-label="Настройки">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
           </span>
           <span class="nav-label">Настройки</span>
         </a>
-        <a class="nav-item" href="#/log" data-route="log">
+        <a class="nav-item" href="#/log" data-route="log" data-label="Журнал">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>
           </span>
@@ -97,7 +97,14 @@
             <span class="conn-user" id="conn-autoreply-user"></span>
           </div>
         </div>
-        <div class="version muted" id="app-version"></div>
+        <div class="sidebar-tools">
+          <button type="button" class="about-btn" id="about-btn" title="О программе">
+            <span class="about-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></span>
+            <span class="about-label">О программе</span>
+            <span class="version muted" id="app-version"></span>
+          </button>
+          <button type="button" class="kbd-btn" id="kbd-btn" title="Горячие клавиши (?)" aria-label="Горячие клавиши"><kbd>?</kbd></button>
+        </div>
       </div>
     </aside>
 
@@ -108,10 +115,11 @@
   </div>
 
   <!-- Уведомления -->
-  <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+  <div id="toasts" class="toasts" role="region" aria-label="Уведомления" aria-live="polite" aria-atomic="false"></div>
 
   <!-- Модальные окна -->
   <div id="modal-root"></div>
+  <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
 
   <script src="/static/app.js"></script>
 </body>
