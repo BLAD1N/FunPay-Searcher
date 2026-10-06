@@ -199,6 +199,15 @@ class OrdersService:
         finally:
             self._busy.release()
 
+    @staticmethod
+    def _order_predates_lot(order: Order, lot: OurLot, grace: timedelta = timedelta(hours=1)) -> bool:
+        """True, если заказ оформлен раньше, чем мы создали лот (значит, это не его продажа)."""
+        if order.order_date is None or lot.created_at is None:
+            return False
+        od = order.order_date if order.order_date.tzinfo else order.order_date.astimezone()
+        created = lot.created_at if lot.created_at.tzinfo else lot.created_at.astimezone()
+        return od < created - grace
+
     def _process(self, raw: dict, lots: list[OurLot], known: dict[str, Order], now: datetime, result: dict) -> None:
         storage = self.ctx.storage
         order = self.to_order(raw)
@@ -214,6 +223,9 @@ class OrdersService:
                 result["matched"] += 1
         else:
             lot = self.match_lot(order, lots)
+            if lot is not None and self._order_predates_lot(order, lot):
+                # заказ старше нашего лота: это продажа чего-то другого с той же ценой/названием
+                lot = None
             if lot is not None:
                 order.lot_id = lot.id
                 order.source_url = lot.source_url or None

@@ -89,7 +89,6 @@ class AutoReplySettings(BaseModel):
         "Передача сразу после оплаты, с полным доступом и сменой данных."
     )
     keywords: dict[str, str] = Field(default_factory=dict)  # {"в наличии|есть?": "Да, в наличии ✅", ...}
-    ignore_if_online_minutes: int = 0  # 0 — отвечать всегда; N — не отвечать, если сами были онлайн N минут назад
 
 
 class UISettings(BaseModel):

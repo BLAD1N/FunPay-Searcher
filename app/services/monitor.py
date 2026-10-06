@@ -112,7 +112,10 @@ class MonitorService:
             ):
                 self._last_raise = time.time()
                 try:
-                    self.raiser.run()
+                    res = self.raiser.run()
+                    waits = [w.get("wait_seconds") for w in (res or {}).get("waiting", []) if w.get("wait_seconds")]
+                    if waits:  # FunPay попросил подождать N — повторим сразу после, а не через auto_raise_hours
+                        self._last_raise = time.time() - s.auto_raise_hours * 3600 + min(waits) + 60
                 except Exception as e:
                     self.ctx.log("raise", f"ошибка автоподнятия: {e}", level="error")
 

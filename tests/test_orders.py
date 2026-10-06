@@ -62,7 +62,7 @@ def _sale(
         "buyer_id": "55",
         "buyer_url": "https://funpay.com/users/55/",
         "order_url": f"https://funpay.com/orders/{order_id}/",
-        "date": datetime(2026, 10, 5, 12, 0, tzinfo=UTC),
+        "date": datetime.now(UTC),  # заказ после создания лота (старые заказы к новым лотам не привязываются)
     }
     d.update(extra)
     return d
@@ -134,7 +134,7 @@ def test_sync_new_orders_match_lot_and_notify(env):
     a, z = orders["ABCDEFGH"], orders["ZZZZZZZZ"]
     assert a.lot_id == lot.id and a.source_url == "https://lzt.market/123" and a.source_price == 15000
     assert a.status == OrderStatus.PAID and a.notified is True
-    assert a.order_date == datetime(2026, 10, 5, 12, 0, tzinfo=UTC)
+    assert a.order_date is not None and a.order_date.tzinfo is not None
     assert a.buyer_name == "buyer1" and a.buyer_url == "https://funpay.com/users/55/"
     assert z.lot_id is None and z.source_url is None and z.status == OrderStatus.CLOSED and z.notified is False
 

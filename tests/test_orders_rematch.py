@@ -87,3 +87,43 @@ def test_old_order_does_not_claim_new_lot(monkeypatch):
     assert ctx.storage.get_lot(lot_b.id).status == LotStatus.ACTIVE, "новый лот не должен быть помечен проданным"
     orders = ctx.storage.list_orders()
     assert len(orders) == 1 and orders[0].lot_id == lot_a.id
+
+
+def test_old_order_predating_lot_is_not_a_sale(monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    tmp = Path(tempfile.mkdtemp())
+    monkeypatch.setattr(Settings, "save", lambda self, path=None: None)
+    settings = Settings()
+    settings.funpay.golden_key = "k"
+    ctx = AppContext(settings=settings, storage=Storage(tmp / "db"), profiles=ProfileStore(tmp / "p"))
+    lot = ctx.storage.save_lot(
+        OurLot(
+            found_id=1,
+            profile_id="p",
+            title_ru="Genshin AR60",
+            price=1500,
+            source_price=800,
+            source_url="u",
+            status=LotStatus.ACTIVE,
+            funpay_lot_id=11,
+            subcategory_id=5,
+        )
+    )
+    old_order = {
+        "order_id": "OLD1",
+        "status": "closed",
+        "title": "Dota 2 акк",
+        "subcategory_name": None,
+        "price": 1500.0,
+        "currency": "RUB",
+        "buyer_name": "b",
+        "buyer_id": "1",
+        "buyer_url": None,
+        "order_url": "https://funpay.com/orders/OLD1/",
+        "date": datetime.now(UTC) - timedelta(days=200),
+    }
+    ctx._funpay = _FakeFunPay([old_order])
+    OrdersService(ctx, _FakeNotifier()).sync()
+    assert ctx.storage.get_lot(lot.id).status == LotStatus.ACTIVE
+    assert ctx.storage.list_orders()[0].lot_id is None

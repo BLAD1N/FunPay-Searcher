@@ -21,6 +21,10 @@ import httpx
 from .models import Found, LotStatus, Order, OurLot, SearchRunStats
 from .settings import TelegramSettings
 
+# httpx пишет каждый запрос в лог на уровне INFO вместе с URL, а в URL Telegram — токен бота
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 API_URL = "https://api.telegram.org"
 MAX_TEXT = 4000  # лимит Telegram — 4096, оставляем запас на закрывающие теги
 TITLE_LEN = 80

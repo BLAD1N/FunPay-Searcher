@@ -34,6 +34,8 @@ from ..settings import DATA_DIR
 from ..sources.funpay_chat import FunPayChat, chat_url
 from .context import AppContext
 
+MAX_BACKOFF_SECONDS = 600  # максимальная пауза между опросами после серии ошибок
+
 STATE_FILE_NAME = "autoreply_state.json"
 MIN_POLL_SECONDS = 5  # защита от слишком частого опроса FunPay
 INITIAL_DELAY_SECONDS = 10  # первый опрос после старта приложения
@@ -160,14 +162,28 @@ class AutoReplyService:
     def _loop(self) -> None:
         delay = max(0, int(self.initial_delay))
         self.next_run = (utcnow() + timedelta(seconds=delay)).isoformat()
+        failures = 0
+        last_error_text: str | None = None
         while not self._stop.wait(delay):
+            failed = False
             try:
                 if self._active():
-                    self.run_once()
+                    res = self.run_once()
+                    failed = bool(res.get("errors")) and not res.get("checked")
             except Exception as e:
+                failed = True
                 self.last_error = str(e)
-                self.ctx.log("chat", f"ошибка автоответчика: {e}", level="error")
-            delay = self._poll_seconds()
+                if str(e) != last_error_text:  # одинаковые ошибки (протухший golden_key) не засоряют журнал
+                    self.ctx.log("chat", f"ошибка автоответчика: {e}", level="error")
+                last_error_text = str(e)
+            base = self._poll_seconds()
+            if failed:
+                failures += 1
+                delay = min(base * (2**failures), MAX_BACKOFF_SECONDS)  # экспоненциальная пауза при сбоях
+            else:
+                failures = 0
+                last_error_text = None
+                delay = base
             self.next_run = (utcnow() + timedelta(seconds=delay)).isoformat()
 
     # ------------------------------------------------------- state file
@@ -312,8 +328,9 @@ class AutoReplyService:
             return
         last = messages[-1]
         prev_id = processed.get(key) if isinstance(processed.get(key), int) else 0
-        processed[key] = max(int(last["id"]), int(last_id or 0))
+        new_marker = max(int(last["id"]), int(last_id or 0))
         if last.get("is_mine") or last.get("system"):
+            processed[key] = new_marker
             return
 
         # новые сообщения покупателя после последнего обработанного (при первом знакомстве — только последнее)
@@ -329,10 +346,19 @@ class AutoReplyService:
         buyer = str(item.get("name") or "").strip() or str(last.get("author") or "").strip() or name
 
         reply_sent: str | None = None
+        reply_failed = False
         if reply_enabled:
-            reply_sent = self._reply(chat, chat_id, buyer, text, result)
+            try:
+                reply_sent = self._reply(chat, chat_id, buyer, text, result)
+            except Exception as e:
+                reply_failed = True
+                result["errors"].append(f"чат {chat_id} ({buyer}): не удалось отправить ответ: {e}")
+                self.ctx.log("chat", f"чат {chat_id} ({buyer}): не удалось отправить ответ: {e}", level="error")
         if notify_enabled:
             self._notify(chat_id, buyer, text, reply_sent, result)
+        # маркер ставим только после успешной обработки: при сбое отправки ответим на следующем опросе
+        if not reply_failed:
+            processed[key] = new_marker
 
     def _reply(self, chat: FunPayChat, chat_id: int, buyer: str, text: str, result: dict) -> str | None:
         s = self.ctx.settings.autoreply
