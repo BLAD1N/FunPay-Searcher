@@ -42,3 +42,16 @@ def test_events_log():
     s.log("k", "m", data={"a": 1})
     e = s.events(1)[0]
     assert e["message"] == "m" and e["data"] == {"a": 1}
+
+
+def test_price_history_tracks_changes():
+    s = Storage(Path(tempfile.mkdtemp()) / "t.db")
+    f, _ = s.upsert_found(Found(profile_id="p", listing=_listing(price=100), match=MatchResult(matched=True)))
+    s.upsert_found(Found(profile_id="p", listing=_listing(price=100), match=MatchResult(matched=True)))
+    s.upsert_found(Found(profile_id="p", listing=_listing(price=80), match=MatchResult(matched=True)))
+    hist = s.price_history(f.id)
+    assert [h["price"] for h in hist] == [100, 80]
+    s.update_found_suggested_price(f.id, 150)
+    assert s.get_found(f.id).suggested_price == 150
+    s.delete_found(f.id)
+    assert s.price_history(f.id) == []

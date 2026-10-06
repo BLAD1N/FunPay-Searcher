@@ -57,6 +57,13 @@ CREATE TABLE IF NOT EXISTS orders (
     first_seen TEXT NOT NULL, updated_at TEXT NOT NULL, notified INTEGER DEFAULT 0, note TEXT DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS price_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    found_id INTEGER NOT NULL REFERENCES found(id) ON DELETE CASCADE,
+    ts TEXT NOT NULL, price REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_price_history_found ON price_history(found_id);
+
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT NOT NULL, level TEXT NOT NULL, kind TEXT NOT NULL, message TEXT NOT NULL, data_json TEXT
@@ -107,6 +114,9 @@ class Storage:
                 # если пользователь скрыл/опубликовал — статус не трогаем, обновляем цену и текст
                 if status in (FoundStatus.NEW.value, FoundStatus.CANDIDATE.value, FoundStatus.REJECTED.value):
                     status = found.status.value
+                if abs(float(row["price"]) - float(l.price)) > 0.009:
+                    self._conn.execute("INSERT INTO price_history (found_id, ts, price) VALUES (?,?,?)",
+                                       (row["id"], _dt(now), l.price))
                 self._conn.execute(
                     """UPDATE found SET url=?, title=?, price=?, currency=?, seller_name=?, seller_url=?, region=?,
                        listing_json=?, match_json=?, score=?, suggested_price=?, status=?, last_seen=?, available=1
@@ -123,6 +133,8 @@ class Storage:
                 (found.profile_id, l.source, l.source_id, l.url, l.title, l.price, l.currency, l.seller_name,
                  l.seller_url, l.region, l.model_dump_json(), found.match.model_dump_json(), found.match.score,
                  found.suggested_price, found.status.value, _dt(now), _dt(now)))
+            self._conn.execute("INSERT INTO price_history (found_id, ts, price) VALUES (?,?,?)",
+                               (cur.lastrowid, _dt(now), l.price))
             self._conn.commit()
             return self.get_found(cur.lastrowid), True
 
@@ -172,7 +184,20 @@ class Storage:
 
     def delete_found(self, found_id: int) -> None:
         with self._lock:
+            self._conn.execute("DELETE FROM price_history WHERE found_id=?", (found_id,))
             self._conn.execute("DELETE FROM found WHERE id=?", (found_id,))
+            self._conn.commit()
+
+    def price_history(self, found_id: int, limit: int = 100) -> list[dict]:
+        """История цены исходного объявления: [{ts, price}] от старых к новым."""
+        with self._lock:
+            rows = self._conn.execute("SELECT ts, price FROM price_history WHERE found_id=? ORDER BY id DESC LIMIT ?",
+                                      (found_id, limit)).fetchall()
+            return [{"ts": r["ts"], "price": r["price"]} for r in reversed(rows)]
+
+    def update_found_suggested_price(self, found_id: int, suggested_price: Optional[float]) -> None:
+        with self._lock:
+            self._conn.execute("UPDATE found SET suggested_price=? WHERE id=?", (suggested_price, found_id))
             self._conn.commit()
 
     # ------------------------------------------------------------- lots
