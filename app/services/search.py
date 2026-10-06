@@ -78,6 +78,12 @@ class SearchService:
         self.last_finished = None
         profiles = self._select_profiles(profile_ids)
         wanted_sources = set(sources or ["funpay", "lolz"])
+        # источники без ключей пропускаем сразу (одно предупреждение вместо ошибки на каждый профиль)
+        has_creds = {"funpay": bool(self.ctx.settings.funpay.golden_key), "lolz": bool(self.ctx.settings.lolz.token)}
+        for name in list(wanted_sources):
+            if not has_creds.get(name):
+                wanted_sources.discard(name)
+                self.ctx.log("search", f"{name}: не задан токен/cookie в настройках — источник пропущен", level="warning")
         jobs: list[tuple[Profile, str]] = []
         for p in profiles:
             if "funpay" in wanted_sources and p.funpay().enabled:
@@ -96,10 +102,6 @@ class SearchService:
             self.progress.update({"profile_id": profile.id, "profile_name": profile.name, "source": source_name,
                                   "fetched": 0, "matched": 0, "new": 0})
             try:
-                creds_ok = (self.ctx.settings.funpay.golden_key if source_name == "funpay"
-                            else self.ctx.settings.lolz.token)
-                if not creds_ok:
-                    raise RuntimeError(f"{source_name}: не задан токен/cookie — пропускаю")
                 source = self.ctx.source(source_name)
                 listings = source.search(profile)
                 stats.fetched = len(listings)
