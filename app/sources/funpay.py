@@ -14,15 +14,17 @@
 Разметка FunPay описана в докстрингах соответствующих методов; каждый ``find`` защищён —
 при неожиданной вёрстке выбрасывается :class:`SourceError` с понятным сообщением.
 """
+
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
 import threading
 import time
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
 
 import httpx
@@ -35,8 +37,7 @@ from .base import AuthError, BaseSource, SourceError
 
 BASE_URL = "https://funpay.com"
 DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 )
 ACCEPT_LANGUAGE = "ru-RU,ru;q=0.9"
 LOGIN_TTL = 40 * 60  # сек; FunPay рекомендует обновлять PHPSESSID раз в 40–60 минут
@@ -57,15 +58,19 @@ _FRIENDLY_FIELDS = {
     "amount": "amount",
 }
 _REQUIRED_FORM_KEYS = (
-    "fields[summary][ru]", "fields[summary][en]", "fields[desc][ru]", "fields[desc][en]",
-    "price", "amount",
+    "fields[summary][ru]",
+    "fields[summary][en]",
+    "fields[desc][ru]",
+    "fields[desc][en]",
+    "price",
+    "amount",
 )
 
 
 # ---------------------------------------------------------------------------
 # Вспомогательные функции (без состояния, покрыты тестами)
 # ---------------------------------------------------------------------------
-def price_from_text(text: Optional[str]) -> Optional[float]:
+def price_from_text(text: str | None) -> float | None:
     """«15 000 ₽» -> 15000.0, «1 234,56 ₽» -> 1234.56, «$12.5» -> 12.5. None — число не найдено."""
     if not text:
         return None
@@ -79,7 +84,7 @@ def price_from_text(text: Optional[str]) -> Optional[float]:
         return None
 
 
-def currency_from_text(text: Optional[str], default: str = "RUB") -> str:
+def currency_from_text(text: str | None, default: str = "RUB") -> str:
     """Определить валюту по символу/коду в тексте цены (₽/$/€/₴). По умолчанию RUB."""
     t = (text or "").lower()
     if "₽" in t or "руб" in t or "rub" in t:
@@ -93,16 +98,16 @@ def currency_from_text(text: Optional[str], default: str = "RUB") -> str:
     return default
 
 
-def _norm(text: Optional[str]) -> str:
+def _norm(text: str | None) -> str:
     """Нормализация для сравнения: нижний регистр, схлопнутые пробелы."""
     return _SPACES_RE.sub(" ", (text or "").replace("\xa0", " ")).strip().lower()
 
 
-def _text(el: Optional[Tag]) -> str:
+def _text(el: Tag | None) -> str:
     return el.get_text(" ", strip=True) if el is not None else ""
 
 
-def _block_text(el: Optional[Tag]) -> str:
+def _block_text(el: Tag | None) -> str:
     """Текст блока с сохранением переносов строк (<br> и <p> -> \\n)."""
     if el is None:
         return ""
@@ -114,7 +119,7 @@ def _block_text(el: Optional[Tag]) -> str:
     return "\n".join(ln for ln in lines if ln)
 
 
-def _int_from_text(text: Optional[str]) -> Optional[int]:
+def _int_from_text(text: str | None) -> int | None:
     if not text:
         return None
     m = _INT_RE.search(_WS_RE.sub("", text))
@@ -131,13 +136,13 @@ def _fmt_number(value: Any) -> str:
     return "" if value is None else str(value)
 
 
-def _absolute(url: Optional[str]) -> Optional[str]:
+def _absolute(url: str | None) -> str | None:
     if not url:
         return None
     return urljoin(BASE_URL + "/", url)
 
 
-def _lot_id_from_href(href: Optional[str]) -> Optional[str]:
+def _lot_id_from_href(href: str | None) -> str | None:
     """ID лота из ссылки: ``/lots/offer?id=123`` или ``/lots/offerEdit?node=1&offer=123``."""
     if not href:
         return None
@@ -180,15 +185,29 @@ def parse_lot_form_html(html: str) -> dict:
                 checked = el.has_attr("checked")
                 if checked:
                     fields[name] = value
-                schema.append({"name": name, "type": "checkbox", "label": label,
-                               "value": value if checked else "", "options": [], "required": required})
+                schema.append(
+                    {
+                        "name": name,
+                        "type": "checkbox",
+                        "label": label,
+                        "value": value if checked else "",
+                        "options": [],
+                        "required": required,
+                    }
+                )
                 continue
             if itype == "radio":
                 value = el.get("value") or "on"
                 entry = radios.get(name)
                 if entry is None:
-                    entry = {"name": name, "type": "radio", "label": label, "value": "",
-                             "options": [], "required": required}
+                    entry = {
+                        "name": name,
+                        "type": "radio",
+                        "label": label,
+                        "value": "",
+                        "options": [],
+                        "required": required,
+                    }
                     radios[name] = entry
                     schema.append(entry)
                 entry["options"].append({"value": value, "label": label})
@@ -199,15 +218,17 @@ def parse_lot_form_html(html: str) -> dict:
             value = el.get("value") or ""
             stype = itype if itype in ("hidden", "number", "text") else "text"
             fields[name] = value
-            schema.append({"name": name, "type": stype, "label": label, "value": value,
-                           "options": [], "required": required})
+            schema.append(
+                {"name": name, "type": stype, "label": label, "value": value, "options": [], "required": required}
+            )
         elif tag == "textarea":
             value = el.get_text()
             if value.startswith("\n"):
                 value = value[1:]
             fields[name] = value
-            schema.append({"name": name, "type": "textarea", "label": label, "value": value,
-                           "options": [], "required": required})
+            schema.append(
+                {"name": name, "type": "textarea", "label": label, "value": value, "options": [], "required": required}
+            )
         elif tag == "select":
             options = []
             selected = None
@@ -221,14 +242,32 @@ def parse_lot_form_html(html: str) -> dict:
             if selected is None:
                 selected = options[0]["value"] if options else ""
             fields[name] = selected
-            schema.append({"name": name, "type": "select", "label": label, "value": selected,
-                           "options": options, "required": required})
+            schema.append(
+                {
+                    "name": name,
+                    "type": "select",
+                    "label": label,
+                    "value": selected,
+                    "options": options,
+                    "required": required,
+                }
+            )
     return {"fields": fields, "schema": schema}
 
 
 MONTHS_RU = {
-    "января": 1, "февраля": 2, "марта": 3, "апреля": 4, "мая": 5, "июня": 6,
-    "июля": 7, "августа": 8, "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
+    "января": 1,
+    "февраля": 2,
+    "марта": 3,
+    "апреля": 4,
+    "мая": 5,
+    "июня": 6,
+    "июля": 7,
+    "августа": 8,
+    "сентября": 9,
+    "октября": 10,
+    "ноября": 11,
+    "декабря": 12,
 }
 _DATE_RE = re.compile(
     r"^(?:(?P<rel>сегодня|вчера)|(?P<day>\d{1,2}) (?P<month>[а-яё]+)(?: (?P<year>\d{4}))?)"
@@ -237,7 +276,7 @@ _DATE_RE = re.compile(
 _WAIT_RE = re.compile(r"(\d+)\s*(час|мин|сек)")
 
 
-def parse_funpay_date(text: Optional[str], now: Optional[datetime] = None) -> Optional[datetime]:
+def parse_funpay_date(text: str | None, now: datetime | None = None) -> datetime | None:
     """Дата заказа FunPay -> datetime (None, если формат не распознан).
 
     Поддерживаются «сегодня, 14:05», «вчера, 09:10», «12 марта, 10:00», «12 марта 2025, 10:00».
@@ -263,7 +302,7 @@ def parse_funpay_date(text: Optional[str], now: Optional[datetime] = None) -> Op
         return None
 
 
-def parse_wait_time(text: Optional[str]) -> Optional[int]:
+def parse_wait_time(text: str | None) -> int | None:
     """«Подождите 3 часа 15 минут» -> 11700 сек; «Подождите час.» -> 3600; None — время не найдено."""
     if not text:
         return None
@@ -312,16 +351,21 @@ class FunPaySource(BaseSource):
     retries = 2
     retry_backoff = 1.0  # сек, умножается на номер попытки
 
-    def __init__(self, settings: FunPaySettings, storage: Any = None, logger: Optional[logging.Logger] = None,
-                 transport: Optional[httpx.BaseTransport] = None):
+    def __init__(
+        self,
+        settings: FunPaySettings,
+        storage: Any = None,
+        logger: logging.Logger | None = None,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
         self.settings = settings
         self.storage = storage
         self.log = logger or logging.getLogger("funpay")
         self.user_agent = settings.user_agent or DEFAULT_USER_AGENT
-        self.phpsessid: Optional[str] = None
-        self.csrf_token: Optional[str] = None
-        self.user_id: Optional[int] = None
-        self.username: Optional[str] = None
+        self.phpsessid: str | None = None
+        self.csrf_token: str | None = None
+        self.user_id: int | None = None
+        self.username: str | None = None
         self.app_data: dict = {}
         self._categories: list[dict] = []
         self._logged_in_at: float = 0.0
@@ -340,18 +384,16 @@ class FunPaySource(BaseSource):
 
     # ------------------------------------------------------------------ infra
     def close(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self._client.close()
-        except Exception:  # noqa: BLE001
-            pass
 
-    def _event(self, message: str, level: str = "info", data: Optional[dict] = None) -> None:
+    def _event(self, message: str, level: str = "info", data: dict | None = None) -> None:
         """Запись в журнал приложения (если передано хранилище) + в лог."""
         getattr(self.log, level if level in ("debug", "info", "warning", "error") else "info")(message)
         if self.storage is not None and hasattr(self.storage, "log"):
             try:
                 self.storage.log("funpay", message, level, data)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 self.log.debug("не удалось записать событие в хранилище", exc_info=True)
 
     def _cookie_header(self) -> str:
@@ -368,8 +410,17 @@ class FunPaySource(BaseSource):
         if elapsed < delay:
             time.sleep(delay - elapsed)
 
-    def _request(self, method: str, path: str, *, params: Optional[dict] = None, data: Optional[dict] = None,
-                 headers: Optional[dict] = None, ajax: bool = False, retry: bool = True) -> httpx.Response:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict | None = None,
+        data: dict | None = None,
+        headers: dict | None = None,
+        ajax: bool = False,
+        retry: bool = True,
+    ) -> httpx.Response:
         """Запрос к FunPay с cookie/заголовками, паузой, повторами при сетевых ошибках и 5xx.
 
         403 -> :class:`AuthError`. Редиректы не выполняются (их интерпретирует вызывающий код).
@@ -385,7 +436,7 @@ class FunPaySource(BaseSource):
             hdrs["x-requested-with"] = "XMLHttpRequest"
         if headers:
             hdrs.update(headers)
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         with self._lock:
             for attempt in range(1, (self.retries if retry else 0) + 2):
                 self._throttle()
@@ -394,15 +445,23 @@ class FunPaySource(BaseSource):
                     response = self._client.request(method, path, params=params, data=data, headers=hdrs)
                 except httpx.TransportError as e:
                     last_error = e
-                    self.log.warning("FunPay: сетевая ошибка (%s) при %s %s, попытка %d/%d",
-                                     e.__class__.__name__, method, path, attempt, self.retries + 1)
+                    self.log.warning(
+                        "FunPay: сетевая ошибка (%s) при %s %s, попытка %d/%d",
+                        e.__class__.__name__,
+                        method,
+                        path,
+                        attempt,
+                        self.retries + 1,
+                    )
                 else:
                     sid = response.cookies.get("PHPSESSID")
                     if sid:
                         self.phpsessid = sid
                     if response.status_code == 403:
-                        raise AuthError("FunPay вернул 403: golden_key невалиден или истёк "
-                                        "(либо запрос заблокирован — проверьте user_agent/прокси)")
+                        raise AuthError(
+                            "FunPay вернул 403: golden_key невалиден или истёк "
+                            "(либо запрос заблокирован — проверьте user_agent/прокси)"
+                        )
                     if response.status_code >= 500:
                         last_error = SourceError(f"FunPay вернул {response.status_code} при {method} {path}")
                         self.log.warning("FunPay: %s, попытка %d/%d", last_error, attempt, self.retries + 1)
@@ -455,8 +514,9 @@ class FunPaySource(BaseSource):
             self.log.warning("FunPay: csrf-token не найден в data-app-data")
         self._categories = self._parse_categories(soup)
         self._logged_in_at = time.monotonic()
-        self.log.info("FunPay: авторизован как %s (id=%s), категорий: %d",
-                      self.username, self.user_id, len(self._categories))
+        self.log.info(
+            "FunPay: авторизован как %s (id=%s), категорий: %d", self.username, self.user_id, len(self._categories)
+        )
         return {"username": self.username, "user_id": self.user_id, "csrf_token": self.csrf_token}
 
     def ensure(self, force: bool = False) -> None:
@@ -498,11 +558,13 @@ class FunPaySource(BaseSource):
                 m = _NODE_ID_RE.search(href)
                 if not m:
                     continue
-                subcats.append({
-                    "id": int(m.group(1)),
-                    "name": _text(a),
-                    "type": "currency" if "/chips/" in href else "common",
-                })
+                subcats.append(
+                    {
+                        "id": int(m.group(1)),
+                        "name": _text(a),
+                        "type": "currency" if "/chips/" in href else "common",
+                    }
+                )
             if game_id in seen:
                 continue
             seen.add(game_id)
@@ -515,7 +577,7 @@ class FunPaySource(BaseSource):
             self.ensure()
         return self._categories
 
-    def find_subcategory(self, game_query: str, subcategory_query: Optional[str] = "Аккаунты") -> Optional[int]:
+    def find_subcategory(self, game_query: str, subcategory_query: str | None = "Аккаунты") -> int | None:
         """Найти id подкатегории по названию игры (точное -> по началу -> по подстроке) и подкатегории."""
         q = _norm(game_query)
         if not q:
@@ -548,7 +610,10 @@ class FunPaySource(BaseSource):
         return None
 
     def resolve_subcategory_ids(self, cfg: SourceFunPayConfig) -> list[int]:
-        """Подкатегории для поиска: ``subcategory_ids`` -> ``subcategory_id`` -> ``game_query``/``subcategory_query``."""
+        """Подкатегории для поиска.
+
+        Приоритет: ``subcategory_ids`` -> ``subcategory_id`` -> ``game_query``/``subcategory_query``.
+        """
         if cfg.subcategory_ids:
             return [int(i) for i in cfg.subcategory_ids]
         if cfg.subcategory_id:
@@ -556,14 +621,16 @@ class FunPaySource(BaseSource):
         if cfg.game_query:
             sid = self.find_subcategory(cfg.game_query, cfg.subcategory_query or "")
             if sid is None:
-                raise SourceError(f"FunPay: не найдена подкатегория для игры «{cfg.game_query}» "
-                                  f"/ «{cfg.subcategory_query}»")
+                raise SourceError(
+                    f"FunPay: не найдена подкатегория для игры «{cfg.game_query}» / «{cfg.subcategory_query}»"
+                )
             return [sid]
-        raise SourceError("В настройках профиля не указана подкатегория FunPay "
-                          "(subcategory_id, subcategory_ids или game_query)")
+        raise SourceError(
+            "В настройках профиля не указана подкатегория FunPay (subcategory_id, subcategory_ids или game_query)"
+        )
 
     # ------------------------------------------------------------------ разбор лотов
-    def _parse_seller(self, container: Optional[Tag]) -> dict:
+    def _parse_seller(self, container: Tag | None) -> dict:
         """Продавец из блока ``.media-user``: имя, ссылка, id, отзывы."""
         info: dict[str, Any] = {"name": None, "url": None, "id": None, "reviews": None, "online": None}
         if container is None:
@@ -574,8 +641,7 @@ class FunPaySource(BaseSource):
             link = name_el.find("a", href=True) or name_el.find(attrs={"data-href": True})
             info["name"] = _text(name_el) or None
         if link is None:
-            link = (container.find("a", href=_USER_ID_RE)
-                    or container.find(attrs={"data-href": _USER_ID_RE}))
+            link = container.find("a", href=_USER_ID_RE) or container.find(attrs={"data-href": _USER_ID_RE})
         if link is not None:
             url = link.get("href") or link.get("data-href")
             info["url"] = _absolute(url)
@@ -595,7 +661,7 @@ class FunPaySource(BaseSource):
             info["online"] = "online" in (media.get("class") or [])
         return info
 
-    def _parse_tc_item(self, a: Tag, subcategory_id: Optional[int]) -> Optional[Listing]:
+    def _parse_tc_item(self, a: Tag, subcategory_id: int | None) -> Listing | None:
         """Разобрать виджет лота ``a.tc-item`` (списки /lots/{id}/, /lots/{id}/trade, /users/{id}/)."""
         href = a.get("href") or ""
         lot_id = _lot_id_from_href(href)
@@ -619,13 +685,11 @@ class FunPaySource(BaseSource):
         amount = _text(a.select_one(".tc-amount")) or None
         seller = self._parse_seller(a.select_one(".tc-user"))
 
-        online: Optional[bool]
-        if a.has_attr("data-online"):
-            online = str(a.get("data-online")).strip() in ("1", "true")
-        else:
-            online = seller["online"]
+        online: bool | None = (
+            str(a.get("data-online")).strip() in ("1", "true") if a.has_attr("data-online") else seller["online"]
+        )
 
-        data_f = {k[len("data-f-"):]: v for k, v in a.attrs.items() if k.startswith("data-f-")}
+        data_f = {k[len("data-f-") :]: v for k, v in a.attrs.items() if k.startswith("data-f-")}
         classes = a.get("class") or []
         attributes: dict[str, Any] = {
             "server": server,
@@ -659,7 +723,7 @@ class FunPaySource(BaseSource):
             online=online,
         )
 
-    def _parse_tc_items(self, root: Tag, subcategory_id: Optional[int], max_items: Optional[int] = None) -> list[Listing]:
+    def _parse_tc_items(self, root: Tag, subcategory_id: int | None, max_items: int | None = None) -> list[Listing]:
         result: list[Listing] = []
         for a in root.select("a.tc-item"):
             listing = self._parse_tc_item(a, subcategory_id)
@@ -669,7 +733,7 @@ class FunPaySource(BaseSource):
                     break
         return result
 
-    def _fetch_lots_page(self, subcategory_id: int, params: Optional[dict] = None, suffix: str = "") -> BeautifulSoup:
+    def _fetch_lots_page(self, subcategory_id: int, params: dict | None = None, suffix: str = "") -> BeautifulSoup:
         path = f"/lots/{int(subcategory_id)}/{suffix}"
         response = self._request("GET", path, params=params or None)
         if response.status_code == 404:
@@ -680,7 +744,7 @@ class FunPaySource(BaseSource):
             raise SourceError(f"FunPay вернул {response.status_code} для {path}")
         return self._soup(response.text)
 
-    def list_lots(self, subcategory_id: int, extra_query: Optional[dict] = None, max_items: int = 500) -> list[Listing]:
+    def list_lots(self, subcategory_id: int, extra_query: dict | None = None, max_items: int = 500) -> list[Listing]:
         """Публичные предложения подкатегории ``/lots/{id}/`` (все на одной странице, без пагинации)."""
         soup = self._fetch_lots_page(subcategory_id, extra_query)
         items = self._parse_tc_items(soup, int(subcategory_id), max_items)
@@ -702,8 +766,13 @@ class FunPaySource(BaseSource):
                 group = el.find_parent(class_="form-group")
                 label_el = group.find("label") if group is not None else None
                 if el.name == "select":
-                    options = [{"value": o.get("value") if o.get("value") is not None else o.get_text(strip=True),
-                                "label": o.get_text(strip=True)} for o in el.find_all("option")]
+                    options = [
+                        {
+                            "value": o.get("value") if o.get("value") is not None else o.get_text(strip=True),
+                            "label": o.get_text(strip=True),
+                        }
+                        for o in el.find_all("option")
+                    ]
                     empty = next((o["label"] for o in options if o["value"] == ""), None)
                     label = _text(label_el) or empty or name
                     result.append({"name": name, "label": label, "type": "select", "options": options})
@@ -713,8 +782,14 @@ class FunPaySource(BaseSource):
                         continue
                     if itype == "checkbox":
                         label = _text(el.find_parent("label")) or _text(label_el) or name
-                        result.append({"name": name, "label": label, "type": "checkbox",
-                                       "options": [{"value": el.get("value") or "1", "label": label}]})
+                        result.append(
+                            {
+                                "name": name,
+                                "label": label,
+                                "type": "checkbox",
+                                "options": [{"value": el.get("value") or "1", "label": label}],
+                            }
+                        )
                     else:
                         label = _text(label_el) or (el.get("placeholder") or "").strip() or name
                         result.append({"name": name, "label": label, "type": "text", "options": []})
@@ -722,7 +797,7 @@ class FunPaySource(BaseSource):
         return result
 
     # ------------------------------------------------------------------ поиск
-    def search(self, profile: Profile, limit: Optional[int] = None) -> list[Listing]:
+    def search(self, profile: Profile, limit: int | None = None) -> list[Listing]:
         cfg = profile.funpay()
         if not cfg.enabled:
             self.log.info("FunPay: источник выключен в профиле %s", profile.id)
@@ -738,8 +813,11 @@ class FunPaySource(BaseSource):
             try:
                 items = self.list_lots(sid, extra_query=cfg.extra_query or None, max_items=max_items)
             except SourceError as e:
-                self._event(f"FunPay: ошибка загрузки подкатегории {sid}: {e}", "error",
-                            {"profile_id": profile.id, "subcategory_id": sid})
+                self._event(
+                    f"FunPay: ошибка загрузки подкатегории {sid}: {e}",
+                    "error",
+                    {"profile_id": profile.id, "subcategory_id": sid},
+                )
                 if len(ids) == 1:
                     raise
                 continue
@@ -758,7 +836,7 @@ class FunPaySource(BaseSource):
         return result
 
     # ------------------------------------------------------------------ лот / доступность
-    def _fetch_lot_page(self, source_id: str) -> Optional[BeautifulSoup]:
+    def _fetch_lot_page(self, source_id: str) -> BeautifulSoup | None:
         """Страница лота. None — лот удалён/продан (404, редирект на категорию, нет ``.param-list``)."""
         lot_id = str(source_id).strip()
         if not lot_id:
@@ -768,8 +846,9 @@ class FunPaySource(BaseSource):
             self.log.info("FunPay: лот %s не найден (404)", lot_id)
             return None
         if 300 <= response.status_code < 400:
-            self.log.info("FunPay: лот %s перенаправлен на %s — считаем снятым",
-                          lot_id, response.headers.get("location"))
+            self.log.info(
+                "FunPay: лот %s перенаправлен на %s — считаем снятым", lot_id, response.headers.get("location")
+            )
             return None
         if response.status_code != 200:
             raise SourceError(f"FunPay вернул {response.status_code} для лота {lot_id}")
@@ -780,7 +859,7 @@ class FunPaySource(BaseSource):
             return None
         return soup
 
-    def get_listing(self, source_id: str) -> Optional[Listing]:
+    def get_listing(self, source_id: str) -> Listing | None:
         """Страница лота ``/lots/offer?id=N``: ``div.param-list > div.param-item (h5 + div)``."""
         soup = self._fetch_lot_page(source_id)
         if soup is None:
@@ -789,9 +868,9 @@ class FunPaySource(BaseSource):
         attributes: dict[str, Any] = {}
         title = ""
         description = ""
-        price: Optional[float] = None
+        price: float | None = None
         price_text = ""
-        seller_block: Optional[Tag] = None
+        seller_block: Tag | None = None
 
         for item in soup.select(".param-item"):
             h5 = item.find("h5")
@@ -847,9 +926,9 @@ class FunPaySource(BaseSource):
         )
 
     @staticmethod
-    def _lot_page_node_id(soup: BeautifulSoup) -> Optional[int]:
+    def _lot_page_node_id(soup: BeautifulSoup) -> int | None:
         """ID подкатегории со страницы лота: back-link, хлебные крошки, ``input[name=node_id]``."""
-        candidates: list[Optional[str]] = []
+        candidates: list[str | None] = []
         for a in soup.select("a.back-link[href], .breadcrumb a[href], .page-header a[href]"):
             candidates.append(a.get("href"))
         inp = soup.select_one("input[name=node_id]")
@@ -863,7 +942,7 @@ class FunPaySource(BaseSource):
                 return int(m.group(1))
         return None
 
-    def is_available(self, source_id: str) -> Optional[bool]:
+    def is_available(self, source_id: str) -> bool | None:
         try:
             return self._fetch_lot_page(source_id) is not None
         except SourceError as e:
@@ -871,7 +950,7 @@ class FunPaySource(BaseSource):
             return None
 
     # ------------------------------------------------------------------ продавец
-    def get_seller(self, seller_id: int | str) -> Optional[dict]:
+    def get_seller(self, seller_id: int | str) -> dict | None:
         """Страница продавца ``/users/{id}/`` -> ``{id, name, reviews, online, lots: [Listing]}``. None — 404."""
         sid = str(seller_id).strip()
         response = self._request("GET", f"/users/{sid}/")
@@ -881,8 +960,11 @@ class FunPaySource(BaseSource):
             raise SourceError(f"FunPay вернул {response.status_code} для продавца {sid}")
         soup = self._soup(response.text)
         profile = soup.select_one(".profile") or soup
-        name = (_text(profile.select_one("h1 .mr4")) or _text(profile.select_one("h1"))
-                or _text(soup.select_one("span.mr4")))
+        name = (
+            _text(profile.select_one("h1 .mr4"))
+            or _text(profile.select_one("h1"))
+            or _text(soup.select_one("span.mr4"))
+        )
         if not name:
             raise SourceError(f"FunPay: не удалось разобрать страницу продавца {sid}")
         reviews = None
@@ -891,8 +973,11 @@ class FunPaySource(BaseSource):
             reviews = _int_from_text(_text(count_el))
         status = _text(profile.select_one(".media-user-status"))
         media = profile.select_one(".media-user")
-        online = ("онлайн" in status.lower()) if status else (
-            "online" in (media.get("class") or []) if media is not None else None)
+        online = (
+            ("онлайн" in status.lower())
+            if status
+            else ("online" in (media.get("class") or []) if media is not None else None)
+        )
 
         lots: list[Listing] = []
         blocks = soup.select(".offer-list-title-container")
@@ -902,7 +987,7 @@ class FunPaySource(BaseSource):
                 m = _NODE_ID_RE.search(link.get("href") or "") if link is not None else None
                 node_id = int(m.group(1)) if m else None
                 block = container.find_parent(class_="offer") or container.parent
-                for a in (block.select("a.tc-item") if block is not None else []):
+                for a in block.select("a.tc-item") if block is not None else []:
                     listing = self._parse_tc_item(a, node_id)
                     if listing is not None:
                         listing.attributes["subcategory_name"] = _text(link) if link is not None else None
@@ -918,7 +1003,7 @@ class FunPaySource(BaseSource):
         soup = self._fetch_lots_page(subcategory_id, suffix="trade")
         return self._parse_tc_items(soup, int(subcategory_id))
 
-    def get_lot_form(self, subcategory_id: int, lot_id: Optional[int | str] = None) -> dict:
+    def get_lot_form(self, subcategory_id: int, lot_id: int | str | None = None) -> dict:
         """Форма лота ``/lots/offerEdit?node=N[&offer=M]`` (XHR, JSON ``{"html": ...}``).
 
         Возвращает ``{"fields": {name: value}, "schema": [{name, type, label, value, options, required}]}``.
@@ -937,8 +1022,9 @@ class FunPaySource(BaseSource):
         try:
             payload = response.json()
         except ValueError:
-            raise SourceError("FunPay вернул не JSON при запросе формы лота — "
-                              "возможно, golden_key истёк или изменилась разметка") from None
+            raise SourceError(
+                "FunPay вернул не JSON при запросе формы лота — возможно, golden_key истёк или изменилась разметка"
+            ) from None
         if not isinstance(payload, dict):
             raise SourceError("FunPay вернул неожиданный ответ при запросе формы лота")
         if payload.get("error"):
@@ -985,8 +1071,14 @@ class FunPaySource(BaseSource):
     def _save_lot_form(self, fields: dict[str, str]) -> dict:
         """POST ``/lots/offerSave``. Успех — ``{"done": true}``; ошибка — ``{"error": "..."}`` -> SourceError."""
         # без повторов: если FunPay сохранил лот и упал, повтор создаст дубль
-        response = self._request("POST", "/lots/offerSave", data=fields, ajax=True, retry=False,
-                                 headers={"content-type": "application/x-www-form-urlencoded; charset=UTF-8"})
+        response = self._request(
+            "POST",
+            "/lots/offerSave",
+            data=fields,
+            ajax=True,
+            retry=False,
+            headers={"content-type": "application/x-www-form-urlencoded; charset=UTF-8"},
+        )
         if response.status_code != 200:
             raise SourceError(f"FunPay вернул {response.status_code} при сохранении лота")
         try:
@@ -1014,13 +1106,13 @@ class FunPaySource(BaseSource):
         return payload
 
     @staticmethod
-    def _lot_url(lot_id: Optional[int | str]) -> Optional[str]:
+    def _lot_url(lot_id: int | str | None) -> str | None:
         return f"{BASE_URL}/lots/offer?id={lot_id}" if lot_id else None
 
-    def _find_lot_id_by_title(self, subcategory_id: int, title_ru: str) -> Optional[int]:
+    def _find_lot_id_by_title(self, subcategory_id: int, title_ru: str) -> int | None:
         """Найти id свежесозданного лота по заголовку среди наших лотов (берём самый новый = больший id)."""
         wanted = _norm(title_ru)
-        best: Optional[int] = None
+        best: int | None = None
         for lot in self.list_my_lots(subcategory_id):
             if _norm(lot.title) != wanted:
                 continue
@@ -1032,9 +1124,19 @@ class FunPaySource(BaseSource):
                 best = lid
         return best
 
-    def create_lot(self, subcategory_id: int, title_ru: str, title_en: str = "", description_ru: str = "",
-                   description_en: str = "", price: Optional[float] = None, amount: int = 1, active: bool = True,
-                   deactivate_after_sale: bool = True, extra_fields: Optional[dict] = None) -> dict:
+    def create_lot(
+        self,
+        subcategory_id: int,
+        title_ru: str,
+        title_en: str = "",
+        description_ru: str = "",
+        description_en: str = "",
+        price: float | None = None,
+        amount: int = 1,
+        active: bool = True,
+        deactivate_after_sale: bool = True,
+        extra_fields: dict | None = None,
+    ) -> dict:
         """Создать лот: форма ``offerEdit?node=N`` + наши значения -> POST ``offerSave``.
 
         ``extra_fields`` накладываются последними (например ``{"fields[server]": "101"}`` из шаблона профиля).
@@ -1047,12 +1149,19 @@ class FunPaySource(BaseSource):
             raise SourceError("FunPay: не задано краткое описание лота (title_ru)")
         form = self.get_lot_form(subcategory_id)
         fields = dict(form["fields"])
-        self._apply_lot_changes(fields, {
-            "title_ru": title_ru, "title_en": title_en,
-            "description_ru": description_ru, "description_en": description_en,
-            "price": price, "amount": amount,
-            "active": active, "deactivate_after_sale": deactivate_after_sale,
-        })
+        self._apply_lot_changes(
+            fields,
+            {
+                "title_ru": title_ru,
+                "title_en": title_en,
+                "description_ru": description_ru,
+                "description_en": description_en,
+                "price": price,
+                "amount": amount,
+                "active": active,
+                "deactivate_after_sale": deactivate_after_sale,
+            },
+        )
         fields["offer_id"] = "0"
         fields["node_id"] = str(int(subcategory_id))
         fields["location"] = "trade"
@@ -1065,11 +1174,17 @@ class FunPaySource(BaseSource):
         except SourceError as e:
             self.log.warning("FunPay: лот создан, но не удалось получить список наших лотов: %s", e)
         if lot_id is None:
-            self._event(f"FunPay: лот «{title_ru}» создан, но его id не найден в /lots/{subcategory_id}/trade",
-                        "warning", {"subcategory_id": subcategory_id})
+            self._event(
+                f"FunPay: лот «{title_ru}» создан, но его id не найден в /lots/{subcategory_id}/trade",
+                "warning",
+                {"subcategory_id": subcategory_id},
+            )
         else:
-            self._event(f"FunPay: создан лот #{lot_id} «{title_ru}» за {_fmt_number(price)}", "info",
-                        {"lot_id": lot_id, "subcategory_id": subcategory_id})
+            self._event(
+                f"FunPay: создан лот #{lot_id} «{title_ru}» за {_fmt_number(price)}",
+                "info",
+                {"lot_id": lot_id, "subcategory_id": subcategory_id},
+            )
         return {"lot_id": lot_id, "url": self._lot_url(lot_id), "response": payload}
 
     def update_lot(self, lot_id: int | str, subcategory_id: int, **changes: Any) -> dict:
@@ -1082,10 +1197,16 @@ class FunPaySource(BaseSource):
         fields["node_id"] = fields.get("node_id") or str(int(subcategory_id))
         fields["location"] = "trade"
         payload = self._save_lot_form(fields)
-        self._event(f"FunPay: лот #{lot_id} обновлён ({', '.join(changes.keys()) or 'без изменений'})", "info",
-                    {"lot_id": lot_id, "subcategory_id": subcategory_id})
-        return {"lot_id": int(lot_id) if str(lot_id).isdigit() else lot_id, "url": self._lot_url(lot_id),
-                "response": payload}
+        self._event(
+            f"FunPay: лот #{lot_id} обновлён ({', '.join(changes.keys()) or 'без изменений'})",
+            "info",
+            {"lot_id": lot_id, "subcategory_id": subcategory_id},
+        )
+        return {
+            "lot_id": int(lot_id) if str(lot_id).isdigit() else lot_id,
+            "url": self._lot_url(lot_id),
+            "response": payload,
+        }
 
     def set_lot_active(self, lot_id: int | str, subcategory_id: int, active: bool) -> dict:
         return self.update_lot(lot_id, subcategory_id, active=bool(active))
@@ -1102,7 +1223,7 @@ class FunPaySource(BaseSource):
         return self.update_lot(lot_id, subcategory_id, deleted="1")
 
     # ------------------------------------------------------------------ продажи
-    def _parse_order_item(self, a: Tag, now: datetime) -> Optional[dict]:
+    def _parse_order_item(self, a: Tag, now: datetime) -> dict | None:
         """Виджет заказа ``a.tc-item`` со страницы /orders/trade."""
         classes = a.get("class") or []
         if "warning" in classes:
@@ -1150,8 +1271,9 @@ class FunPaySource(BaseSource):
             "date": parse_funpay_date(_text(a.select_one(".tc-date-time")), now),
         }
 
-    def get_sales(self, include_paid: bool = True, include_closed: bool = True, include_refunded: bool = True,
-                  max_pages: int = 1) -> list[dict]:
+    def get_sales(
+        self, include_paid: bool = True, include_closed: bool = True, include_refunded: bool = True, max_pages: int = 1
+    ) -> list[dict]:
         """Наши продажи со страницы ``/orders/trade`` (первая страница — GET, следующие — POST ``continue=...``).
 
         Статус: класс ``info`` — оплачен (paid), ``warning`` — возврат (refunded), иначе — закрыт (closed).
@@ -1163,16 +1285,22 @@ class FunPaySource(BaseSource):
         now = datetime.now()
         result: list[dict] = []
         seen: set[str] = set()
-        cont: Optional[str] = None
+        cont: str | None = None
         for page in range(max(1, int(max_pages))):
             if page == 0:
                 response = self._request("GET", "/orders/trade")
             else:
-                response = self._request("POST", "/orders/trade", data={"continue": cont},
-                                         headers={"content-type": "application/x-www-form-urlencoded; charset=UTF-8"})
+                response = self._request(
+                    "POST",
+                    "/orders/trade",
+                    data={"continue": cont},
+                    headers={"content-type": "application/x-www-form-urlencoded; charset=UTF-8"},
+                )
             if 300 <= response.status_code < 400:
-                raise SourceError(f"FunPay перенаправил /orders/trade на {response.headers.get('location')} "
-                                  "— вероятно, golden_key истёк")
+                raise SourceError(
+                    f"FunPay перенаправил /orders/trade на {response.headers.get('location')} "
+                    "— вероятно, golden_key истёк"
+                )
             if response.status_code != 200:
                 raise SourceError(f"FunPay вернул {response.status_code} для /orders/trade")
             soup = self._soup(response.text)
@@ -1195,7 +1323,7 @@ class FunPaySource(BaseSource):
         return result
 
     # ------------------------------------------------------------------ поднятие лотов
-    def category_of_subcategory(self, subcategory_id: int) -> Optional[int]:
+    def category_of_subcategory(self, subcategory_id: int) -> int | None:
         """ID категории (игры), к которой относится подкатегория (по кэшу категорий)."""
         try:
             sid = int(subcategory_id)
@@ -1211,7 +1339,7 @@ class FunPaySource(BaseSource):
                 fallback = fallback if fallback is not None else cat["id"]
         return fallback
 
-    def raise_lots(self, category_id: int, subcategory_ids: Optional[list[int]] = None) -> dict:
+    def raise_lots(self, category_id: int, subcategory_ids: list[int] | None = None) -> dict:
         """Поднять лоты категории: POST ``/lots/raise`` (game_id, node_id, node_ids[]).
 
         Возвращает ``{"ok": bool, "message": str, "wait_seconds": int|None}``; при «Подождите ...»
@@ -1229,8 +1357,13 @@ class FunPaySource(BaseSource):
         if not ids:
             raise SourceError(f"FunPay: в категории {category_id} нет подкатегорий для поднятия")
         payload = {"game_id": cat_id, "node_id": ids[0], "node_ids[]": ids}
-        response = self._request("POST", "/lots/raise", data=payload, ajax=True,
-                                 headers={"content-type": "application/x-www-form-urlencoded; charset=UTF-8"})
+        response = self._request(
+            "POST",
+            "/lots/raise",
+            data=payload,
+            ajax=True,
+            headers={"content-type": "application/x-www-form-urlencoded; charset=UTF-8"},
+        )
         if response.status_code != 200:
             raise SourceError(f"FunPay вернул {response.status_code} при поднятии лотов")
         try:
@@ -1241,13 +1374,12 @@ class FunPaySource(BaseSource):
             raise SourceError("FunPay вернул неожиданный ответ при поднятии лотов")
         msg = str(data.get("msg") or "")
         if not data.get("error"):
-            self._event(f"FunPay: лоты категории {cat_id} подняты ({msg or 'ok'})", "info",
-                        {"category_id": cat_id, "subcategory_ids": ids})
+            self._event(
+                f"FunPay: лоты категории {cat_id} подняты ({msg or 'ok'})",
+                "info",
+                {"category_id": cat_id, "subcategory_ids": ids},
+            )
             return {"ok": True, "message": msg, "wait_seconds": None}
         wait = parse_wait_time(msg) if "подожд" in msg.lower() else None
         self.log.info("FunPay: поднятие лотов категории %s отклонено: %s (ждать %s сек)", cat_id, msg, wait)
         return {"ok": False, "message": msg, "wait_seconds": wait}
-
-    def get_balance(self) -> Optional[dict]:
-        """Баланс не реализован (требует страницы лота с формой оплаты)."""
-        return None

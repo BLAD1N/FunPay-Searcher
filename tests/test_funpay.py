@@ -1,8 +1,9 @@
 """Тесты источника FunPay на фикстурах (сети нет — httpx.MockTransport)."""
+
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs
 
@@ -34,8 +35,8 @@ class FakeFunPay:
     def __init__(self):
         self.requests: list[httpx.Request] = []
         self.logged_out = False
-        self.fail_times = 0            # сколько первых запросов вернуть 500
-        self.raise_times = 0           # сколько первых запросов «уронить» сетевой ошибкой
+        self.fail_times = 0  # сколько первых запросов вернуть 500
+        self.raise_times = 0  # сколько первых запросов «уронить» сетевой ошибкой
         self.forbidden = False
         self.save_response: dict | str = {"done": True, "error": None, "url": "https://funpay.com/lots/148/trade"}
         self.save_status = 200
@@ -80,12 +81,16 @@ class FakeFunPay:
         if path == "/lots/offerEdit":
             data = json.loads(load("offer_edit.json"))
             if params.get("offer"):
-                data["html"] = (data["html"]
-                                .replace('name="offer_id" value="0"', f'name="offer_id" value="{params["offer"]}"')
-                                .replace('name="fields[summary][ru]" value=""',
-                                         'name="fields[summary][ru]" value="WoT | 15 топов, Об. 279(р) | RU"')
-                                .replace('name="price" value=""', 'name="price" value="28990"')
-                                .replace('<option value="101">RU</option>', '<option value="101" selected>RU</option>'))
+                data["html"] = (
+                    data["html"]
+                    .replace('name="offer_id" value="0"', f'name="offer_id" value="{params["offer"]}"')
+                    .replace(
+                        'name="fields[summary][ru]" value=""',
+                        'name="fields[summary][ru]" value="WoT | 15 топов, Об. 279(р) | RU"',
+                    )
+                    .replace('name="price" value=""', 'name="price" value="28990"')
+                    .replace('<option value="101">RU</option>', '<option value="101" selected>RU</option>')
+                )
             return httpx.Response(200, json=data)
         if path == "/lots/offerSave":
             if isinstance(self.save_response, str):
@@ -192,8 +197,12 @@ def test_login_invalid_key(src: FunPaySource, fake: FakeFunPay):
     fake.logged_out = True
     with pytest.raises(AuthError, match="golden_key невалиден или истёк"):
         src.login()
-    assert src.check_auth() == {"ok": False, "username": None, "user_id": None,
-                                "error": "golden_key невалиден или истёк"}
+    assert src.check_auth() == {
+        "ok": False,
+        "username": None,
+        "user_id": None,
+        "error": "golden_key невалиден или истёк",
+    }
 
 
 def test_login_without_key(fake: FakeFunPay):
@@ -262,7 +271,7 @@ def test_resolve_subcategory_ids(src: FunPaySource):
 # ----------------------------------------------------------------------------- списки
 def test_list_lots_parsing(src: FunPaySource, fake: FakeFunPay):
     lots = src.list_lots(148)
-    assert [l.source_id for l in lots] == ["1001", "1002", "1003", "1004"]
+    assert [x.source_id for x in lots] == ["1001", "1002", "1003", "1004"]
     assert fake.requests[-1].url == "https://funpay.com/lots/148/"
 
     a = lots[0]
@@ -290,11 +299,11 @@ def test_list_lots_parsing(src: FunPaySource, fake: FakeFunPay):
     assert b.seller_name == "EuroTrader"
     assert b.seller_id == "5002"
     assert b.attributes["seller_reviews"] == 12
-    assert b.online is False          # нет data-online и нет класса online
+    assert b.online is False  # нет data-online и нет класса online
     assert b.price == 8500.0
 
     c = lots[2]
-    assert c.region == "RU"           # вариант tc-server hidden-xs
+    assert c.region == "RU"  # вариант tc-server hidden-xs
     assert c.price == 120.0
     assert c.currency == "USD"
     assert c.attributes["seller_reviews"] == 0
@@ -339,17 +348,17 @@ def test_list_filters(src: FunPaySource):
 def test_search_with_server_filter(src: FunPaySource, fake: FakeFunPay):
     profile = make_profile(subcategory_id=148, server_filter=["ru"], extra_query={"f-online": "1"})
     found = src.search(profile)
-    assert [l.source_id for l in found] == ["1001", "1003"]
-    assert all(l.game == "wot" for l in found)
+    assert [x.source_id for x in found] == ["1001", "1003"]
+    assert all(x.game == "wot" for x in found)
     assert dict(fake.requests[-1].url.params) == {"f-online": "1"}
 
     found = src.search(make_profile(subcategory_id=148, server_filter=["EU", "na"]))
-    assert [l.source_id for l in found] == ["1002", "1004"]
+    assert [x.source_id for x in found] == ["1002", "1004"]
 
 
 def test_search_limit_and_dedup(src: FunPaySource):
     found = src.search(make_profile(subcategory_ids=[148, 148]))
-    assert [l.source_id for l in found] == ["1001", "1002", "1003", "1004"]
+    assert [x.source_id for x in found] == ["1001", "1002", "1003", "1004"]
     assert len(src.search(make_profile(subcategory_id=148), limit=2)) == 2
     assert src.search(make_profile(game_query="World of Tanks"))[0].source_id == "1001"
 
@@ -367,7 +376,10 @@ def test_get_listing(src: FunPaySource, fake: FakeFunPay):
     assert fake.requests[-1].url == "https://funpay.com/lots/offer?id=1001"
     assert lot.source_id == "1001"
     assert lot.title == "WoT аккаунт 15 топов, Объект 279(р), 60 000 боёв"
-    assert lot.description == "Аккаунт World of Tanks RU.\n15 топов, Объект 279(р), Chieftain.\nПривязка к почте, полный доступ."
+    assert (
+        lot.description
+        == "Аккаунт World of Tanks RU.\n15 топов, Объект 279(р), Chieftain.\nПривязка к почте, полный доступ."
+    )
     assert lot.price == 15000.0
     assert lot.currency == "RUB"
     assert lot.region == "RU"
@@ -383,9 +395,9 @@ def test_get_listing(src: FunPaySource, fake: FakeFunPay):
 
 
 def test_get_listing_missing(src: FunPaySource):
-    assert src.get_listing("1002") is None    # 200, но «Предложение не найдено»
-    assert src.get_listing("1003") is None    # 404
-    assert src.get_listing("1004") is None    # 302 на страницу категории
+    assert src.get_listing("1002") is None  # 200, но «Предложение не найдено»
+    assert src.get_listing("1003") is None  # 404
+    assert src.get_listing("1004") is None  # 302 на страницу категории
 
 
 def test_is_available(src: FunPaySource, fake: FakeFunPay):
@@ -405,7 +417,7 @@ def test_get_seller(src: FunPaySource):
     assert seller["reviews"] == 154
     assert seller["online"] is True
     lots = seller["lots"]
-    assert [l.source_id for l in lots] == ["1001", "1010", "2001"]
+    assert [x.source_id for x in lots] == ["1001", "1010", "2001"]
     assert lots[0].attributes["subcategory_id"] == 148
     assert lots[0].attributes["subcategory_name"] == "World of Tanks, Аккаунты"
     assert lots[2].attributes["subcategory_id"] == 81
@@ -427,24 +439,29 @@ def test_get_lot_form_schema(src: FunPaySource, fake: FakeFunPay):
     assert fields["offer_id"] == "0"
     assert fields["node_id"] == "148"
     assert fields["location"] == "trade"
-    assert fields["fields[server]"] == ""          # первая option
-    assert fields["fields[type]"] == "1"           # selected
+    assert fields["fields[server]"] == ""  # первая option
+    assert fields["fields[type]"] == "1"  # selected
     assert fields["fields[summary][ru]"] == ""
     assert fields["fields[desc][ru]"] == ""
     assert fields["price"] == ""
     assert fields["amount"] == "1"
-    assert fields["active"] == "on"                # checked
-    assert fields["deactivate_after_sale"] == ""   # не отмечен, но ключ гарантирован
-    assert "fields[auto_delivery]" not in fields   # прочие неотмеченные чекбоксы не отправляются
+    assert fields["active"] == "on"  # checked
+    assert fields["deactivate_after_sale"] == ""  # не отмечен, но ключ гарантирован
+    assert "fields[auto_delivery]" not in fields  # прочие неотмеченные чекбоксы не отправляются
     assert "submit" not in fields
 
     schema = {s["name"]: s for s in form["schema"]}
     assert schema["fields[server]"]["type"] == "select"
     assert schema["fields[server]"]["label"] == "Сервер"
     assert schema["fields[server]"]["options"][1] == {"value": "101", "label": "RU"}
-    assert schema["fields[summary][ru]"] == {"name": "fields[summary][ru]", "type": "text",
-                                             "label": "Краткое описание (RU)", "value": "", "options": [],
-                                             "required": False}
+    assert schema["fields[summary][ru]"] == {
+        "name": "fields[summary][ru]",
+        "type": "text",
+        "label": "Краткое описание (RU)",
+        "value": "",
+        "options": [],
+        "required": False,
+    }
     assert schema["fields[desc][ru]"]["type"] == "textarea"
     assert schema["price"]["type"] == "number"
     assert schema["price"]["required"] is True
@@ -458,8 +475,10 @@ def test_get_lot_form_schema(src: FunPaySource, fake: FakeFunPay):
 
 
 def test_parse_lot_form_html_fallbacks():
-    form = parse_lot_form_html("<div><input name='a' value='1'><input type='radio' name='r' value='x'>"
-                               "<input type='radio' name='r' value='y' checked><select name='s'></select></div>")
+    form = parse_lot_form_html(
+        "<div><input name='a' value='1'><input type='radio' name='r' value='x'>"
+        "<input type='radio' name='r' value='y' checked><select name='s'></select></div>"
+    )
     assert form["fields"] == {"a": "1", "r": "y", "s": ""}
     assert [s["name"] for s in form["schema"]] == ["a", "r", "s"]
     assert form["schema"][1]["options"] == [{"value": "x", "label": "r"}, {"value": "y", "label": "r"}]
@@ -473,8 +492,9 @@ def test_get_lot_form_not_json(src: FunPaySource, fake: FakeFunPay):
             return httpx.Response(200, text="<html>login</html>")
         return original(request)
 
-    src._client = httpx.Client(base_url="https://funpay.com", transport=httpx.MockTransport(handler),
-                               follow_redirects=False)
+    src._client = httpx.Client(
+        base_url="https://funpay.com", transport=httpx.MockTransport(handler), follow_redirects=False
+    )
     with pytest.raises(SourceError, match="не JSON"):
         src.get_lot_form(148)
 
@@ -499,8 +519,7 @@ def test_create_lot(src: FunPaySource, fake: FakeFunPay):
 
     # порядок запросов: главная (login) -> форма -> сохранение -> мои лоты
     paths = [(r.method, r.url.path) for r in fake.requests]
-    assert paths == [("GET", "/"), ("GET", "/lots/offerEdit"), ("POST", "/lots/offerSave"),
-                     ("GET", "/lots/148/trade")]
+    assert paths == [("GET", "/"), ("GET", "/lots/offerEdit"), ("POST", "/lots/offerSave"), ("GET", "/lots/148/trade")]
 
     post = next(r for r in fake.requests if r.method == "POST")
     assert post.headers["x-requested-with"] == "XMLHttpRequest"
@@ -520,7 +539,7 @@ def test_create_lot(src: FunPaySource, fake: FakeFunPay):
     assert body["amount"] == "1"
     assert body["active"] == "on"
     assert body["deactivate_after_sale"] == "on"
-    assert body["fields[server]"] == "101"      # extra_fields перекрывает значение формы
+    assert body["fields[server]"] == "101"  # extra_fields перекрывает значение формы
     assert body["fields[type]"] == "2"
     assert body["fields[payment_msg][ru]"] == ""
     assert "fields[auto_delivery]" not in body
@@ -569,7 +588,7 @@ def test_set_lot_active(src: FunPaySource, fake: FakeFunPay):
     assert body["offer_id"] == "9001"
     assert body["node_id"] == "148"
     assert body["active"] == ""
-    assert body["fields[summary][ru]"] == "WoT | 15 топов, Об. 279(р) | RU"   # остальные поля сохранены
+    assert body["fields[summary][ru]"] == "WoT | 15 топов, Об. 279(р) | RU"  # остальные поля сохранены
     assert body["fields[server]"] == "101"
     assert body["price"] == "28990"
 
@@ -583,8 +602,9 @@ def test_set_lot_price_and_update(src: FunPaySource, fake: FakeFunPay):
     assert body["price"] == "31990"
     assert body["offer_id"] == "9001"
 
-    src.update_lot(9001, 148, title_ru="Новый заголовок", description_en="New", fields={"fields[server]": "102"},
-                   amount=2)
+    src.update_lot(
+        9001, 148, title_ru="Новый заголовок", description_en="New", fields={"fields[server]": "102"}, amount=2
+    )
     body = fake.posted("/lots/offerSave")
     assert body["fields[summary][ru]"] == "Новый заголовок"
     assert body["fields[desc][en]"] == "New"
@@ -601,8 +621,8 @@ def test_delete_lot(src: FunPaySource, fake: FakeFunPay):
 
 def test_list_my_lots(src: FunPaySource):
     lots = src.list_my_lots(148)
-    assert [l.source_id for l in lots] == ["8999", "9001", "9000"]
-    assert lots[0].attributes["active"] is False     # класс warning = неактивный
+    assert [x.source_id for x in lots] == ["8999", "9001", "9000"]
+    assert lots[0].attributes["active"] is False  # класс warning = неактивный
     assert lots[1].attributes["active"] is True
     assert lots[1].url == "https://funpay.com/lots/offer?id=9001"
     assert lots[1].price == 28990.0
@@ -637,8 +657,8 @@ def test_parse_funpay_date():
     # перенос через месяц/год для «вчера»
     assert parse_funpay_date("вчера, 23:59", datetime(2026, 1, 1, 0, 10)) == datetime(2025, 12, 31, 23, 59)
     # tzinfo берётся из now
-    aware = datetime(2026, 10, 6, 15, 30, tzinfo=timezone.utc)
-    assert parse_funpay_date("12 марта, 10:00", aware) == datetime(2026, 3, 12, 10, 0, tzinfo=timezone.utc)
+    aware = datetime(2026, 10, 6, 15, 30, tzinfo=UTC)
+    assert parse_funpay_date("12 марта, 10:00", aware) == datetime(2026, 3, 12, 10, 0, tzinfo=UTC)
     assert parse_funpay_date("вчера, 09:10", aware) == aware - timedelta(days=1, hours=6, minutes=20)
     # мусор
     assert parse_funpay_date("", now) is None
@@ -698,11 +718,22 @@ def test_get_sales(src: FunPaySource, fake: FakeFunPay):
     assert third["subcategory_name"] == "Dota 2, Аккаунты"
     assert third["price"] == 45.0
     assert third["currency"] == "USD"
-    assert third["buyer_name"] == "refund_guy"          # покупатель как a[href]
+    assert third["buyer_name"] == "refund_guy"  # покупатель как a[href]
     assert third["buyer_id"] == "6003"
     assert third["date"] == datetime(2025, 3, 12, 10, 0)
-    assert set(first) == {"order_id", "status", "title", "subcategory_name", "price", "currency",
-                          "buyer_name", "buyer_id", "buyer_url", "order_url", "date"}
+    assert set(first) == {
+        "order_id",
+        "status",
+        "title",
+        "subcategory_name",
+        "price",
+        "currency",
+        "buyer_name",
+        "buyer_id",
+        "buyer_url",
+        "order_url",
+        "date",
+    }
 
 
 def test_get_sales_filters(src: FunPaySource):
@@ -746,13 +777,21 @@ def test_raise_lots_ok(src: FunPaySource, fake: FakeFunPay):
     assert post.headers["accept"] == "*/*"
     assert post.headers["content-type"].startswith("application/x-www-form-urlencoded")
     # все «обычные» подкатегории игры (chips/2 исключён), node_id — первая из них
-    assert parse_qs(post.content.decode("utf-8")) == {"game_id": ["4"], "node_id": ["148"], "node_ids[]": ["148", "149"]}
+    assert parse_qs(post.content.decode("utf-8")) == {
+        "game_id": ["4"],
+        "node_id": ["148"],
+        "node_ids[]": ["148", "149"],
+    }
 
 
 def test_raise_lots_explicit_subcategories(src: FunPaySource, fake: FakeFunPay):
     src.raise_lots(4, [149, 148])
     post = next(r for r in fake.requests if r.url.path == "/lots/raise")
-    assert parse_qs(post.content.decode("utf-8")) == {"game_id": ["4"], "node_id": ["149"], "node_ids[]": ["149", "148"]}
+    assert parse_qs(post.content.decode("utf-8")) == {
+        "game_id": ["4"],
+        "node_id": ["149"],
+        "node_ids[]": ["149", "148"],
+    }
 
 
 def test_raise_lots_wait(src: FunPaySource, fake: FakeFunPay):
@@ -781,7 +820,7 @@ def test_category_of_subcategory(src: FunPaySource):
     assert src.category_of_subcategory(148) == 4
     assert src.category_of_subcategory(149) == 4
     assert src.category_of_subcategory(82) == 41
-    assert src.category_of_subcategory(2) == 4          # валютная подкатегория — запасной вариант
+    assert src.category_of_subcategory(2) == 4  # валютная подкатегория — запасной вариант
     assert src.category_of_subcategory(1181) == 1067
     assert src.category_of_subcategory(99999) is None
     assert src.category_of_subcategory("abc") is None

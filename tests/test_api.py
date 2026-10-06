@@ -1,4 +1,5 @@
 """Интеграционные тесты HTTP API с фейковыми источниками (без сети)."""
+
 from __future__ import annotations
 
 import tempfile
@@ -23,13 +24,13 @@ class FakeSource:
         self.listings = listings
         self.created: list[dict] = []
         self.active_calls: list[tuple] = []
-        self.available = {l.source_id: True for l in listings}
+        self.available = {x.source_id: True for x in listings}
 
     def search(self, profile, limit=None):
-        return [l.model_copy(update={"game": profile.game}) for l in self.listings]
+        return [x.model_copy(update={"game": profile.game}) for x in self.listings]
 
     def get_listing(self, source_id):
-        return next((l for l in self.listings if l.source_id == source_id and self.available.get(source_id)), None)
+        return next((x for x in self.listings if x.source_id == source_id and self.available.get(source_id)), None)
 
     def is_available(self, source_id):
         return self.available.get(source_id, False)
@@ -42,7 +43,9 @@ class FakeSource:
         return [148]
 
     def categories(self):
-        return [{"id": 1, "name": "World of Tanks", "subcategories": [{"id": 148, "name": "Аккаунты", "type": "common"}]}]
+        return [
+            {"id": 1, "name": "World of Tanks", "subcategories": [{"id": 148, "name": "Аккаунты", "type": "common"}]}
+        ]
 
     def create_lot(self, subcategory_id, **kw):
         self.created.append({"subcategory_id": subcategory_id, **kw})
@@ -64,29 +67,75 @@ def client(monkeypatch):
     settings.monitor.enabled = False
     monkeypatch.setattr(Settings, "save", lambda self, path=None: None)
     store = ProfileStore(tmp / "profiles")
-    store.save(Profile(
-        id="wot_test", name="WoT тест", game="wot", region="RU",
-        sources={"funpay": {"enabled": True, "subcategory_id": 148}, "lolz": {"enabled": True, "category": "world-of-tanks"}},
-        criteria={"price": {"min": 1000, "max": 50000}, "must_any": ["все топы", "chieftain|чифтейн"],
-                  "exclude": ["бан"], "highlights": ["Chieftain", "Об. 279"]},
-        pricing={"mode": "formula", "formula": "price * 2 - 1000", "round_to": 100},
-        lot_template={"title_ru": "{game} | {highlights} | {region}", "fields": {"fields[server]": "ru"}},
-    ))
+    store.save(
+        Profile(
+            id="wot_test",
+            name="WoT тест",
+            game="wot",
+            region="RU",
+            sources={
+                "funpay": {"enabled": True, "subcategory_id": 148},
+                "lolz": {"enabled": True, "category": "world-of-tanks"},
+            },
+            criteria={
+                "price": {"min": 1000, "max": 50000},
+                "must_any": ["все топы", "chieftain|чифтейн"],
+                "exclude": ["бан"],
+                "highlights": ["Chieftain", "Об. 279"],
+            },
+            pricing={"mode": "formula", "formula": "price * 2 - 1000", "round_to": 100},
+            lot_template={"title_ru": "{game} | {highlights} | {region}", "fields": {"fields[server]": "ru"}},
+        )
+    )
     ctx = AppContext(settings=settings, storage=Storage(tmp / "db.sqlite"), profiles=store)
-    funpay = FakeSource("funpay", [
-        Listing(source="funpay", source_id="1", url="https://funpay.com/lots/offer?id=1",
-                title="Аккаунт WoT все топы, Chieftain, Об. 279", price=15000, region="RU",
-                seller_name="seller1", seller_url="https://funpay.com/users/10/",
-                attributes={"subcategory_id": 148, "seller_reviews": 50}),
-        Listing(source="funpay", source_id="2", url="https://funpay.com/lots/offer?id=2",
-                title="Аккаунт с баном", price=15000, region="RU", attributes={"subcategory_id": 148}),
-        Listing(source="funpay", source_id="3", url="https://funpay.com/lots/offer?id=3",
-                title="все топы", price=99999, region="RU", attributes={"subcategory_id": 148}),
-    ])
-    lolz = FakeSource("lolz", [
-        Listing(source="lolz", source_id="500", url="https://lzt.market/500", title="WoT чифтейн, 60 танков 10 лвл",
-                price=20000, seller_name="lz", seller_url="https://lolz.live/members/5/"),
-    ])
+    funpay = FakeSource(
+        "funpay",
+        [
+            Listing(
+                source="funpay",
+                source_id="1",
+                url="https://funpay.com/lots/offer?id=1",
+                title="Аккаунт WoT все топы, Chieftain, Об. 279",
+                price=15000,
+                region="RU",
+                seller_name="seller1",
+                seller_url="https://funpay.com/users/10/",
+                attributes={"subcategory_id": 148, "seller_reviews": 50},
+            ),
+            Listing(
+                source="funpay",
+                source_id="2",
+                url="https://funpay.com/lots/offer?id=2",
+                title="Аккаунт с баном",
+                price=15000,
+                region="RU",
+                attributes={"subcategory_id": 148},
+            ),
+            Listing(
+                source="funpay",
+                source_id="3",
+                url="https://funpay.com/lots/offer?id=3",
+                title="все топы",
+                price=99999,
+                region="RU",
+                attributes={"subcategory_id": 148},
+            ),
+        ],
+    )
+    lolz = FakeSource(
+        "lolz",
+        [
+            Listing(
+                source="lolz",
+                source_id="500",
+                url="https://lzt.market/500",
+                title="WoT чифтейн, 60 танков 10 лвл",
+                price=20000,
+                seller_name="lz",
+                seller_url="https://lolz.live/members/5/",
+            ),
+        ],
+    )
     ctx._funpay, ctx._lolz = funpay, lolz
     app = create_app(ctx, start_monitor=False)
     with TestClient(app) as c:
@@ -98,7 +147,9 @@ def test_status_and_settings(client):
     r = client.get("/api/status")
     assert r.status_code == 200 and r.json()["version"]
     s = client.get("/api/settings").json()
-    assert s["funpay"]["golden_key_set"] is True and "…" in s["funpay"]["golden_key"] or "•" in s["funpay"]["golden_key"]
+    assert (s["funpay"]["golden_key_set"] is True and "…" in s["funpay"]["golden_key"]) or "•" in s["funpay"][
+        "golden_key"
+    ]
     # секрет не затирается маской
     r = client.put("/api/settings", json={"funpay": {"golden_key": s["funpay"]["golden_key"], "request_delay": 2.5}})
     assert r.status_code == 200
@@ -170,7 +221,8 @@ def test_found_actions(client):
 
 def test_profiles_crud(client):
     p = client.get("/api/profiles/wot_test").json()
-    p["id"] = "new_one"; p["name"] = "Новый"
+    p["id"] = "new_one"
+    p["name"] = "Новый"
     assert client.post("/api/profiles", json=p).status_code == 201
     assert client.post("/api/profiles", json=p).status_code == 409
     d = client.post("/api/profiles/new_one/duplicate").json()
@@ -183,12 +235,19 @@ def test_profiles_crud(client):
 
 
 def test_pricing_and_matching_helpers(client):
-    r = client.post("/api/pricing/preview", json={"price": 30000, "pricing": {"mode": "formula", "formula": "price * 2 - 1000", "round_to": 100}})
+    r = client.post(
+        "/api/pricing/preview",
+        json={"price": 30000, "pricing": {"mode": "formula", "formula": "price * 2 - 1000", "round_to": 100}},
+    )
     assert r.json()["price"] == 59000
-    r = client.post("/api/pricing/preview", json={"price": 1, "pricing": {"mode": "formula", "formula": "__import__('os')"}})
+    r = client.post(
+        "/api/pricing/preview", json={"price": 1, "pricing": {"mode": "formula", "formula": "__import__('os')"}}
+    )
     assert r.status_code == 400
     p = client.get("/api/profiles/wot_test").json()
-    r = client.post("/api/matching/test", json={"profile": p, "text": "продам акк все топы чифтейн", "price": 10000}).json()
+    r = client.post(
+        "/api/matching/test", json={"profile": p, "text": "продам акк все топы чифтейн", "price": 10000}
+    ).json()
     assert r["matched"] is True and r["suggested_price"] == 19000
     r = client.post("/api/matching/test", json={"profile": p, "text": "все топы, но бан", "price": 10000}).json()
     assert r["matched"] is False
@@ -248,9 +307,21 @@ def test_settings_roundtrip_keeps_all_secrets_and_origin_guard(client):
 
 def test_csv_export_neutralises_formulas(client):
     from app.models import Found, Listing, MatchResult
-    client.ctx.storage.upsert_found(Found(profile_id="wot_test", match=MatchResult(matched=True, score=1),
-                                          listing=Listing(source="funpay", source_id="x1", url="u", price=10,
-                                                          title="=HYPERLINK(\"http://evil\")", seller_name="+cmd")))
+
+    client.ctx.storage.upsert_found(
+        Found(
+            profile_id="wot_test",
+            match=MatchResult(matched=True, score=1),
+            listing=Listing(
+                source="funpay",
+                source_id="x1",
+                url="u",
+                price=10,
+                title='=HYPERLINK("http://evil")',
+                seller_name="+cmd",
+            ),
+        )
+    )
     body = client.get("/api/export/found.csv").content.decode("utf-8-sig")
     assert "'=HYPERLINK" in body and "'+cmd" in body
 

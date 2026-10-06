@@ -1,4 +1,5 @@
 """Тесты матчинга объявлений по критериям (app/matching.py)."""
+
 from __future__ import annotations
 
 import random
@@ -7,18 +8,31 @@ import time
 import pytest
 
 from app.matching import (
-    evaluate, get_attribute, match_text, normalize, normalize_region, parse_number,
+    evaluate,
+    get_attribute,
+    match_text,
+    normalize,
+    normalize_region,
+    parse_number,
 )
 from app.models import Criteria, Listing, NumericRule, PriceRange
 
 
 def make_listing(title: str = "", description: str = "", price: float = 10000, region=None, **attrs) -> Listing:
-    return Listing(source="funpay", source_id="1", url="https://funpay.com/lots/offer?id=1",
-                   title=title, description=description, price=price, region=region,
-                   attributes=attrs)
+    return Listing(
+        source="funpay",
+        source_id="1",
+        url="https://funpay.com/lots/offer?id=1",
+        title=title,
+        description=description,
+        price=price,
+        region=region,
+        attributes=attrs,
+    )
 
 
 # ----------------------------------------------------------------- normalize --
+
 
 def test_normalize_basic():
     assert normalize("  Привет,   МИР! ") == "привет мир"
@@ -33,34 +47,38 @@ def test_normalize_keeps_decimal_and_apostrophe():
 
 
 def test_normalize_folds_homoglyphs():
-    assert normalize("E 100") == normalize("Е 100")   # латиница == кириллица
+    assert normalize("E 100") == normalize("Е 100")  # латиница == кириллица
     assert normalize("x lvl") == normalize("х lvl")
 
 
 # ----------------------------------------------------------------- match_text --
 
-@pytest.mark.parametrize("text, term, expected", [
-    ("Продам акк, Chieftain есть", "chieftain", True),
-    ("CHIEFTAIN", "Chieftain", True),
-    ("все 100 танков", "все 10", False),          # граница слова
-    ("все 10 танков", "все 10", True),
-    ("собака dog", "og", False),
-    ("og скины", "og", True),
-    ("топовый аккаунт", "топ*", True),             # хвостовой wildcard
-    ("стоп", "топ*", False),
-    ("топовые танки", "топ* танк*", True),         # wildcard внутри фразы
-    ("чифтейн и 279", "chieftain|чифтейн", True),  # альтернативы
-    ("нет ничего", "chieftain|чифтейн", False),
-    ("Об. 279 (р) в ангаре", "об 279", True),       # пунктуация не важна
-    ("Об.279", "об 279", True),
-    ("10   lvl", "10 lvl", True),                   # лишние пробелы
-    ("Е 100 (кириллица)", "e 100", True),           # двойники букв
-    ("без бана", "бан", False),
-    ("есть бан", "бан", True),
-    ("", "бан", False),
-    ("текст", "", False),
-    ("текст", "|", False),
-])
+
+@pytest.mark.parametrize(
+    "text, term, expected",
+    [
+        ("Продам акк, Chieftain есть", "chieftain", True),
+        ("CHIEFTAIN", "Chieftain", True),
+        ("все 100 танков", "все 10", False),  # граница слова
+        ("все 10 танков", "все 10", True),
+        ("собака dog", "og", False),
+        ("og скины", "og", True),
+        ("топовый аккаунт", "топ*", True),  # хвостовой wildcard
+        ("стоп", "топ*", False),
+        ("топовые танки", "топ* танк*", True),  # wildcard внутри фразы
+        ("чифтейн и 279", "chieftain|чифтейн", True),  # альтернативы
+        ("нет ничего", "chieftain|чифтейн", False),
+        ("Об. 279 (р) в ангаре", "об 279", True),  # пунктуация не важна
+        ("Об.279", "об 279", True),
+        ("10   lvl", "10 lvl", True),  # лишние пробелы
+        ("Е 100 (кириллица)", "e 100", True),  # двойники букв
+        ("без бана", "бан", False),
+        ("есть бан", "бан", True),
+        ("", "бан", False),
+        ("текст", "", False),
+        ("текст", "|", False),
+    ],
+)
 def test_match_text(text, term, expected):
     assert match_text(text, term) is expected
 
@@ -72,14 +90,31 @@ def test_match_label_syntax():
 
 # ----------------------------------------------------------------- регионы --
 
-@pytest.mark.parametrize("value, expected", [
-    ("RU", "RU"), ("ru", "RU"), ("Россия", "RU"), ("Lesta", "RU"), ("лесты", "RU"), ("РФ", "RU"),
-    ("RU (Lesta)", "RU"),
-    ("EU", "EU"), ("Европа", "EU"), ("europe", "EU"),
-    ("NA", "NA"), ("Америка", "NA"), ("США", "NA"),
-    ("ASIA", "ASIA"), ("Азия", "ASIA"), ("SEA", "ASIA"),
-    ("euw", "EUW"), (None, None), ("", None),
-])
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("RU", "RU"),
+        ("ru", "RU"),
+        ("Россия", "RU"),
+        ("Lesta", "RU"),
+        ("лесты", "RU"),
+        ("РФ", "RU"),
+        ("RU (Lesta)", "RU"),
+        ("EU", "EU"),
+        ("Европа", "EU"),
+        ("europe", "EU"),
+        ("NA", "NA"),
+        ("Америка", "NA"),
+        ("США", "NA"),
+        ("ASIA", "ASIA"),
+        ("Азия", "ASIA"),
+        ("SEA", "ASIA"),
+        ("euw", "EUW"),
+        (None, None),
+        ("", None),
+    ],
+)
 def test_normalize_region(value, expected):
     assert normalize_region(value) == expected
 
@@ -108,6 +143,7 @@ def test_region_not_checked_when_criteria_empty():
 
 # ----------------------------------------------------------------- цена --
 
+
 def test_price_outside_range_rejects():
     c = Criteria(price=PriceRange(min=3000, max=60000))
     assert not evaluate(make_listing("акк", price=2999), c).matched
@@ -124,6 +160,7 @@ def test_price_open_bounds():
 
 
 # ----------------------------------------------------------------- стоп-слова --
+
 
 def test_exclude_rejects_with_word():
     r = evaluate(make_listing("аккаунт, есть бан чата"), Criteria(exclude=["бан", "blitz"]))
@@ -144,6 +181,7 @@ def test_regex_exclude():
 
 # ----------------------------------------------------------------- must_all --
 
+
 def test_must_all_requires_every_term():
     c = Criteria(must_all=["prime", "faceit"])
     r = evaluate(make_listing("CS2 prime faceit 10"), c)
@@ -154,6 +192,7 @@ def test_must_all_requires_every_term():
 
 
 # ----------------------------------------------------------------- must_any --
+
 
 def test_must_any_none_rejects():
     r = evaluate(make_listing("просто аккаунт"), Criteria(must_any=["топы", "chieftain"]))
@@ -183,6 +222,7 @@ def test_must_any_label_used_as_highlight():
 
 # ----------------------------------------------------------------- regex_any --
 
+
 def test_regex_any_required_when_set():
     c = Criteria(regex_any=[r"(\d{4,5})\s*(mmr|ммр)"])
     r = evaluate(make_listing("Dota 2, 7200 MMR"), c)
@@ -207,11 +247,26 @@ def test_invalid_regex_does_not_crash():
 
 # ----------------------------------------------------------------- числа --
 
-@pytest.mark.parametrize("value, expected", [
-    (1234, 1234.0), (12.5, 12.5), ("1 234 танка", 1234.0), ("1 234", 1234.0),
-    ("6,5k mmr", 6500.0), ("6.5K", 6500.0), ("2,500", 2500.0), ("2,5", 2.5),
-    ("уровень: 42", 42.0), ("нет", None), (None, None), ("", None), (True, None), ("1m", 1_000_000.0),
-])
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (1234, 1234.0),
+        (12.5, 12.5),
+        ("1 234 танка", 1234.0),
+        ("1 234", 1234.0),
+        ("6,5k mmr", 6500.0),
+        ("6.5K", 6500.0),
+        ("2,500", 2500.0),
+        ("2,5", 2.5),
+        ("уровень: 42", 42.0),
+        ("нет", None),
+        (None, None),
+        ("", None),
+        (True, None),
+        ("1m", 1_000_000.0),
+    ],
+)
 def test_parse_number(value, expected):
     assert parse_number(value) == expected
 
@@ -249,6 +304,7 @@ def test_numeric_rule_case_insensitive_field_and_nested():
 
 # ----------------------------------------------------------------- highlights --
 
+
 def test_highlights_keep_criteria_casing_and_score():
     c = Criteria(highlights=["Chieftain", "Об. 279 (р)", "ИС-7", "Maus"])
     r = evaluate(make_listing("акк: chieftain, об 279 р, ис-7"), c)
@@ -277,6 +333,7 @@ def test_highlights_in_attributes_text():
 
 # ----------------------------------------------------------------- продавец --
 
+
 def test_seller_min_reviews():
     c = Criteria(seller_min_reviews=10)
     assert not evaluate(make_listing("акк", seller_reviews=3), c).matched
@@ -285,6 +342,7 @@ def test_seller_min_reviews():
 
 
 # ----------------------------------------------------------------- итог --
+
 
 def test_min_score_threshold():
     c = Criteria(highlights=["Chieftain"], min_score=1.0)
@@ -314,8 +372,7 @@ def test_full_realistic_profile():
         highlights=["Об. 279 (р) => об 279|279 р", "E 100 => е 100|e-100", "ИС-7 => ис-7|ис7"],
         regions=["RU"],
     )
-    lst = make_listing("Аккаунт Мир танков: все топы, Chieftain, Об. 279 (р), E 100, ИС-7",
-                       price=15000, region="Lesta")
+    lst = make_listing("Аккаунт Мир танков: все топы, Chieftain, Об. 279 (р), E 100, ИС-7", price=15000, region="Lesta")
     r = evaluate(lst, c)
     assert r.matched
     assert r.highlights == ["Об. 279 (р)", "E 100", "ИС-7", "Все топы", "Chieftain"]
@@ -324,26 +381,65 @@ def test_full_realistic_profile():
 
 # ----------------------------------------------------------------- скорость --
 
+
 def test_performance_5000_listings():
     random.seed(1)
-    words = ["аккаунт", "танки", "chieftain", "об 279", "топы", "10 lvl", "прем", "голда", "бан",
-             "ис-7", "e 100", "kranvagn", "maus", "продам", "дёшево", "срочно", "привязка", "почта"]
+    words = [
+        "аккаунт",
+        "танки",
+        "chieftain",
+        "об 279",
+        "топы",
+        "10 lvl",
+        "прем",
+        "голда",
+        "бан",
+        "ис-7",
+        "e 100",
+        "kranvagn",
+        "maus",
+        "продам",
+        "дёшево",
+        "срочно",
+        "привязка",
+        "почта",
+    ]
     listings = [
-        make_listing(" ".join(random.choices(words, k=12)), " ".join(random.choices(words, k=40)),
-                     price=random.randint(1000, 90000), region=random.choice(["RU", "EU", None]),
-                     tanks=f"{random.randint(1, 2000)} танков")
+        make_listing(
+            " ".join(random.choices(words, k=12)),
+            " ".join(random.choices(words, k=40)),
+            price=random.randint(1000, 90000),
+            region=random.choice(["RU", "EU", None]),
+            tanks=f"{random.randint(1, 2000)} танков",
+        )
         for _ in range(5000)
     ]
     c = Criteria(
         price=PriceRange(min=3000, max=60000),
-        must_any=["Все топы => все топы|топ*", "10 lvl|10 лвл|х лвл", "Chieftain => chieftain|чифт*",
-                  "об 279|объект 279", "прем*", "голд*|gold"],
+        must_any=[
+            "Все топы => все топы|топ*",
+            "10 lvl|10 лвл|х лвл",
+            "Chieftain => chieftain|чифт*",
+            "об 279|объект 279",
+            "прем*",
+            "голд*|gold",
+        ],
         exclude=["бан|banned|забанен*", "без почты", "blitz", "аренда"],
         regex_any=[r"(топ|chieftain|279|прем|голд)"],
         regex_exclude=[r"(есть|стоит)\s+бан"],
         numeric=[NumericRule(field="tanks", min=10)],
-        highlights=["Chieftain", "Об. 279 (р) => об 279|279 р", "E 100 => е 100|e-100", "ИС-7 => ис-7|ис7",
-                    "Kranvagn => kranvagn|крана", "Maus => maus|маус", "60TP", "Strv", "Progetto", "FV4005"],
+        highlights=[
+            "Chieftain",
+            "Об. 279 (р) => об 279|279 р",
+            "E 100 => е 100|e-100",
+            "ИС-7 => ис-7|ис7",
+            "Kranvagn => kranvagn|крана",
+            "Maus => maus|маус",
+            "60TP",
+            "Strv",
+            "Progetto",
+            "FV4005",
+        ],
         regions=["RU"],
     )
     t0 = time.perf_counter()

@@ -4,14 +4,17 @@
 (заголовки объявлений, имена продавцов/покупателей, ссылки) экранируется через :func:`esc`.
 Все публичные методы «тихие»: исключений наружу не выбрасывают, при ошибке пишут warning и возвращают False.
 """
+
 from __future__ import annotations
 
+import contextlib
 import html
 import logging
 import re
 import threading
 import time
-from typing import Any, Callable, Iterable, Optional
+from collections.abc import Callable, Iterable
+from typing import Any, ClassVar
 
 import httpx
 
@@ -19,7 +22,7 @@ from .models import Found, LotStatus, Order, OurLot, SearchRunStats
 from .settings import TelegramSettings
 
 API_URL = "https://api.telegram.org"
-MAX_TEXT = 4000            # лимит Telegram — 4096, оставляем запас на закрывающие теги
+MAX_TEXT = 4000  # лимит Telegram — 4096, оставляем запас на закрывающие теги
 TITLE_LEN = 80
 
 SOURCE_BADGE = {"funpay": "FunPay", "lolz": "Lolz"}
@@ -44,16 +47,13 @@ def fmt_money(value: Any, currency: str = "RUB") -> str:
         x = float(value)
     except (TypeError, ValueError):
         return esc(value)
-    if abs(x - round(x)) < 0.005:
-        body = f"{round(x):,.0f}"
-    else:
-        body = f"{x:,.2f}"
+    body = f"{round(x):,.0f}" if abs(x - round(x)) < 0.005 else f"{x:,.2f}"
     body = body.replace(",", " ")
     sign = CURRENCY_SIGN.get((currency or "RUB").upper(), currency or "")
     return f"{body} {sign}".strip()
 
 
-def trim(text: Optional[str], limit: int = TITLE_LEN) -> str:
+def trim(text: str | None, limit: int = TITLE_LEN) -> str:
     """Обрезать строку до ``limit`` символов с многоточием."""
     text = " ".join((text or "").split())
     if len(text) <= limit:
@@ -68,7 +68,7 @@ def truncate_html(text: str, limit: int = MAX_TEXT) -> str:
     budget = max(16, limit - 64)  # запас под многоточие и закрывающие теги
     cut = text[:budget]
     lt, gt = cut.rfind("<"), cut.rfind(">")
-    if lt > gt:                   # разрез пришёлся внутри тега
+    if lt > gt:  # разрез пришёлся внутри тега
         cut = cut[:lt]
     amp, semi = cut.rfind("&"), cut.rfind(";")
     if amp > semi and len(cut) - amp <= 10:  # разрез внутри сущности (&amp; ...)
@@ -88,7 +88,7 @@ def truncate_html(text: str, limit: int = MAX_TEXT) -> str:
     return cut + "…" + "".join(f"</{t}>" for t in reversed(stack))
 
 
-def _link(url: Optional[str], label: Optional[str] = None) -> str:
+def _link(url: str | None, label: str | None = None) -> str:
     """HTML-ссылка; без url — просто экранированный текст."""
     if not url:
         return esc(label or "")
@@ -106,7 +106,7 @@ class TelegramNotifier:
     """
 
     # соответствие вида сообщения переключателю в настройках; "info" разрешён всегда
-    KIND_SWITCH = {
+    KIND_SWITCH: ClassVar[dict[str, str]] = {
         "candidates": "notify_new_candidates",
         "sold": "notify_source_sold",
         "order": "notify_new_orders",
@@ -114,17 +114,20 @@ class TelegramNotifier:
         "price": "notify_price_changes",
         "messages": "notify_messages",
     }
-    min_interval = 1.0   # не чаще одного сообщения в секунду
+    min_interval = 1.0  # не чаще одного сообщения в секунду
     timeout = 15.0
 
-    def __init__(self, settings_getter: Callable[[], TelegramSettings],
-                 transport: Optional[httpx.BaseTransport] = None,
-                 logger: Optional[logging.Logger] = None):
+    def __init__(
+        self,
+        settings_getter: Callable[[], TelegramSettings],
+        transport: httpx.BaseTransport | None = None,
+        logger: logging.Logger | None = None,
+    ) -> None:
         self._get_settings = settings_getter
         self.log = logger or logging.getLogger("telegram")
         self._lock = threading.Lock()
         self._last_sent_at = 0.0
-        self.last_error: Optional[str] = None
+        self.last_error: str | None = None
         self.sent_count = 0
         kwargs: dict[str, Any] = {"timeout": httpx.Timeout(self.timeout)}
         if transport is not None:
@@ -136,7 +139,7 @@ class TelegramNotifier:
     def settings(self) -> TelegramSettings:
         try:
             return self._get_settings()
-        except Exception:  # noqa: BLE001
+        except Exception:
             return TelegramSettings()
 
     @property
@@ -154,10 +157,8 @@ class TelegramNotifier:
         return bool(getattr(self.settings, attr, True))
 
     def close(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self._http.close()
-        except Exception:  # noqa: BLE001
-            pass
 
     # ------------------------------------------------------------- send
     def _throttle(self) -> None:
@@ -168,8 +169,7 @@ class TelegramNotifier:
     def _api_url(self, method: str) -> str:
         return f"{API_URL}/bot{self.settings.bot_token}/{method}"
 
-    def send(self, text: str, *, kind: str = "info", parse_mode: str = "HTML",
-             disable_preview: bool = True) -> bool:
+    def send(self, text: str, *, kind: str = "info", parse_mode: str = "HTML", disable_preview: bool = True) -> bool:
         """Отправить сообщение. Никогда не выбрасывает исключений: при ошибке — warning и False."""
         try:
             s = self.settings
@@ -208,7 +208,7 @@ class TelegramNotifier:
             self.last_error = str(err)
             self.log.warning("Telegram: не удалось отправить сообщение (%s): %s", kind, err)
             return False
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             self.last_error = str(e)
             self.log.warning("Telegram: ошибка отправки сообщения (%s): %s", kind, e)
             return False
@@ -230,7 +230,7 @@ class TelegramNotifier:
                 error = None if s.chat_id else "не задан chat_id — сообщения отправлять некуда"
                 return {"ok": True, "error": error, "bot_name": name}
             return {"ok": False, "error": data.get("description") or f"HTTP {resp.status_code}", "bot_name": None}
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             return {"ok": False, "error": str(e), "bot_name": None}
 
     # --------------------------------------------------- message builders
@@ -240,28 +240,28 @@ class TelegramNotifier:
         n = len(items)
         lines = [f"🔍 <b>Новые аккаунты: {esc(profile_name)} ({n})</b>"]
         for i, f in enumerate(items[:max_items], 1):
-            l = f.listing
-            badge = SOURCE_BADGE.get(l.source, str(l.source))
-            title = trim(l.title or "(без названия)", TITLE_LEN)
+            lst = f.listing
+            badge = SOURCE_BADGE.get(lst.source, str(lst.source))
+            title = trim(lst.title or "(без названия)", TITLE_LEN)
             lines.append("")
-            lines.append(f"{i}. [{esc(badge)}] {_link(l.url, title)}")
-            price = f"💵 {fmt_money(l.price, l.currency)}"
+            lines.append(f"{i}. [{esc(badge)}] {_link(lst.url, title)}")
+            price = f"💵 {fmt_money(lst.price, lst.currency)}"
             if f.suggested_price:
-                price += f" → <b>{fmt_money(f.suggested_price, l.currency)}</b>"
+                price += f" → <b>{fmt_money(f.suggested_price, lst.currency)}</b>"
             lines.append(price)
             highlights = [h for h in (f.match.highlights or []) if h]
             if highlights:
                 lines.append("✨ " + esc(", ".join(highlights[:8])))
-            if l.seller_url:
-                lines.append("👤 " + _link(l.seller_url, l.seller_name or "продавец"))
-            elif l.seller_name:
-                lines.append("👤 " + esc(l.seller_name))
+            if lst.seller_url:
+                lines.append("👤 " + _link(lst.seller_url, lst.seller_name or "продавец"))
+            elif lst.seller_name:
+                lines.append("👤 " + esc(lst.seller_name))
         if n > max_items:
             lines.append("")
             lines.append(f"… и ещё {n - max_items}")
         return "\n".join(lines)
 
-    def format_source_sold(self, lot: OurLot, deactivated: Optional[bool] = None) -> str:
+    def format_source_sold(self, lot: OurLot, deactivated: bool | None = None) -> str:
         """Исходное объявление продано/снято. ``deactivated`` — снят ли наш лот (по умолчанию — по статусу лота)."""
         if deactivated is None:
             deactivated = lot.status in (LotStatus.DEACTIVATED, LotStatus.SOLD)
@@ -276,7 +276,7 @@ class TelegramNotifier:
         lines.append("✅ Лот деактивирован" if deactivated else "❗ Проверьте лот — он всё ещё может быть в продаже")
         return "\n".join(lines)
 
-    def format_order(self, order: Order, lot: Optional[OurLot] = None) -> str:
+    def format_order(self, order: Order, lot: OurLot | None = None) -> str:
         """Новый заказ (продажа) на FunPay + где купить исходник."""
         lines = [f"💰 <b>Новый заказ на FunPay #{esc(order.funpay_order_id)}</b>"]
         title = trim(order.title or "", 120)
@@ -311,8 +311,9 @@ class TelegramNotifier:
             text += f"\n<code>{esc(details[:1500])}</code>"
         return text
 
-    def format_search_summary(self, stats: Iterable[SearchRunStats],
-                              profile_names: Optional[dict[str, str]] = None) -> str:
+    def format_search_summary(
+        self, stats: Iterable[SearchRunStats], profile_names: dict[str, str] | None = None
+    ) -> str:
         """Итоги поиска по профилям/источникам."""
         stats = list(stats or [])
         names = profile_names or {}

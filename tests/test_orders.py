@@ -1,9 +1,10 @@
 """Тесты сервиса заказов: фейковый FunPay (get_sales) + реальное хранилище во временной БД (без сети)."""
+
 from __future__ import annotations
 
 import json
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -47,11 +48,22 @@ class RecordingNotifier(TelegramNotifier):
         self.min_interval = 0
 
 
-def _sale(order_id: str, status: str = "paid", title: str = "WoT | Chieftain, Об. 279 | RU", price: float = 29000,
-          **extra) -> dict:
-    d = {"order_id": order_id, "status": status, "title": title, "subcategory_name": "Аккаунты", "price": price,
-         "currency": "RUB", "buyer_name": "buyer1", "buyer_id": "55", "buyer_url": "https://funpay.com/users/55/",
-         "order_url": f"https://funpay.com/orders/{order_id}/", "date": datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)}
+def _sale(
+    order_id: str, status: str = "paid", title: str = "WoT | Chieftain, Об. 279 | RU", price: float = 29000, **extra
+) -> dict:
+    d = {
+        "order_id": order_id,
+        "status": status,
+        "title": title,
+        "subcategory_name": "Аккаунты",
+        "price": price,
+        "currency": "RUB",
+        "buyer_name": "buyer1",
+        "buyer_id": "55",
+        "buyer_url": "https://funpay.com/users/55/",
+        "order_url": f"https://funpay.com/orders/{order_id}/",
+        "date": datetime(2026, 10, 5, 12, 0, tzinfo=UTC),
+    }
     d.update(extra)
     return d
 
@@ -64,15 +76,36 @@ def _make_ctx(monkeypatch, golden_key: str = "test-key") -> AppContext:
     return AppContext(settings=settings, storage=Storage(tmp / "db.sqlite"), profiles=ProfileStore(tmp / "profiles"))
 
 
-def _add_lot(ctx: AppContext, title: str, price: float, status: LotStatus = LotStatus.ACTIVE,
-             source_url: str = "https://lzt.market/123", source_price: float = 15000, i: str = "1") -> OurLot:
-    found, _ = ctx.storage.upsert_found(Found(
-        profile_id="wot", listing=Listing(source="lolz", source_id=i + title, url=source_url, title=title, price=source_price),
-        match=MatchResult(matched=True, score=2)))
-    return ctx.storage.save_lot(OurLot(found_id=found.id, profile_id="wot", funpay_lot_id=777,
-                                       funpay_url="https://funpay.com/lots/offer?id=777", subcategory_id=148,
-                                       title_ru=title, price=price, source_price=source_price, source_url=source_url,
-                                       status=status))
+def _add_lot(
+    ctx: AppContext,
+    title: str,
+    price: float,
+    status: LotStatus = LotStatus.ACTIVE,
+    source_url: str = "https://lzt.market/123",
+    source_price: float = 15000,
+    i: str = "1",
+) -> OurLot:
+    found, _ = ctx.storage.upsert_found(
+        Found(
+            profile_id="wot",
+            listing=Listing(source="lolz", source_id=i + title, url=source_url, title=title, price=source_price),
+            match=MatchResult(matched=True, score=2),
+        )
+    )
+    return ctx.storage.save_lot(
+        OurLot(
+            found_id=found.id,
+            profile_id="wot",
+            funpay_lot_id=777,
+            funpay_url="https://funpay.com/lots/offer?id=777",
+            subcategory_id=148,
+            title_ru=title,
+            price=price,
+            source_price=source_price,
+            source_url=source_url,
+            status=status,
+        )
+    )
 
 
 @pytest.fixture()
@@ -101,7 +134,7 @@ def test_sync_new_orders_match_lot_and_notify(env):
     a, z = orders["ABCDEFGH"], orders["ZZZZZZZZ"]
     assert a.lot_id == lot.id and a.source_url == "https://lzt.market/123" and a.source_price == 15000
     assert a.status == OrderStatus.PAID and a.notified is True
-    assert a.order_date == datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
+    assert a.order_date == datetime(2026, 10, 5, 12, 0, tzinfo=UTC)
     assert a.buyer_name == "buyer1" and a.buyer_url == "https://funpay.com/users/55/"
     assert z.lot_id is None and z.source_url is None and z.status == OrderStatus.CLOSED and z.notified is False
 
@@ -203,11 +236,19 @@ def test_match_lot_strategies(monkeypatch):
     lots = ctx.storage.list_lots(limit=1000)
 
     # точное совпадение, предпочитаем активный лот
-    assert OrdersService.match_lot(Order(funpay_order_id="1", title="Dota 2 | Immortal | EU", price=1), lots).id == active.id
+    assert (
+        OrdersService.match_lot(Order(funpay_order_id="1", title="Dota 2 | Immortal | EU", price=1), lots).id
+        == active.id
+    )
     # нормализованное (регистр/пробелы) — у проданного лота название совпадает только так
-    assert OrdersService.match_lot(Order(funpay_order_id="2", title="  cs2 |  prime | ru ", price=1), lots).id == sold.id
+    assert (
+        OrdersService.match_lot(Order(funpay_order_id="2", title="  cs2 |  prime | ru ", price=1), lots).id == sold.id
+    )
     # по уникальной цене среди активных
-    assert OrdersService.match_lot(Order(funpay_order_id="3", title="что-то другое", price=12345), lots).id == unique_price.id
+    assert (
+        OrdersService.match_lot(Order(funpay_order_id="3", title="что-то другое", price=12345), lots).id
+        == unique_price.id
+    )
     # цена неуникальна — не сопоставляем
     assert OrdersService.match_lot(Order(funpay_order_id="4", title="другое", price=9999), lots) is None
     # цена совпадает только с неактивным лотом — не сопоставляем
@@ -226,7 +267,9 @@ def test_helpers():
     assert _parse_status("Закрыт") == OrderStatus.CLOSED
     assert _parse_status("что-то") == OrderStatus.PAID
     assert _parse_status(OrderStatus.CLOSED) == OrderStatus.CLOSED
-    o = OrdersService.to_order({"order_id": "X1", "status": "paid", "price": "12.5", "date": "2026-10-01T10:00:00+00:00"})
+    o = OrdersService.to_order(
+        {"order_id": "X1", "status": "paid", "price": "12.5", "date": "2026-10-01T10:00:00+00:00"}
+    )
     assert o.price == 12.5 and o.order_url == "https://funpay.com/orders/X1/" and o.order_date.year == 2026
     with pytest.raises(ValueError):
         OrdersService.to_order({"status": "paid"})
@@ -234,7 +277,7 @@ def test_helpers():
 
 # ---------------------------------------------------------------- query
 def test_list_and_set_note(env):
-    ctx, lot, funpay, notifier, svc = env
+    ctx, lot, _funpay, _notifier, svc = env
     svc.sync()
     items = svc.list()
     assert len(items) == 2 and {i["funpay_order_id"] for i in items} == {"ABCDEFGH", "ZZZZZZZZ"}

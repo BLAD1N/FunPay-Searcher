@@ -1,4 +1,5 @@
 """Тесты чата FunPay на фикстурах (сети нет — httpx.MockTransport поверх FunPaySource)."""
+
 from __future__ import annotations
 
 import json
@@ -109,21 +110,33 @@ def test_random_tag_and_chat_url():
 def test_parse_contact_items_tolerates_garbage():
     assert parse_contact_items("") == []
     assert parse_contact_items("<div>нет чатов</div>") == []
-    html = ('<a class="contact-item unread" data-id="7" data-node-msg="x">'
-            '<div class="contact-item-message">привет</div></a>'
-            '<a class="contact-item" data-id="7"><div class="media-user-name">dup</div></a>'
-            '<a class="contact-item">без id</a>')
+    html = (
+        '<a class="contact-item unread" data-id="7" data-node-msg="x">'
+        '<div class="contact-item-message">привет</div></a>'
+        '<a class="contact-item" data-id="7"><div class="media-user-name">dup</div></a>'
+        '<a class="contact-item">без id</a>'
+    )
     chats = parse_contact_items(html)
     assert len(chats) == 1
-    assert chats[0] == {"chat_id": 7, "name": "", "last_message_id": None, "last_user_message_id": None,
-                        "last_text": "привет", "time": None, "unread": True,
-                        "url": "https://funpay.com/chat/?node=7"}
+    assert chats[0] == {
+        "chat_id": 7,
+        "name": "",
+        "last_message_id": None,
+        "last_user_message_id": None,
+        "last_text": "привет",
+        "time": None,
+        "unread": True,
+        "url": "https://funpay.com/chat/?node=7",
+    }
 
 
 def test_parse_messages_without_names():
-    raw = [{"id": "2", "author": "5", "html": "<div class='message-text'>два</div>"},
-           {"id": 1, "author": 5, "html": "<div class='chat-msg-text'>один</div>"},
-           {"id": "bad", "author": 5, "html": ""}, "мусор"]
+    raw = [
+        {"id": "2", "author": "5", "html": "<div class='message-text'>два</div>"},
+        {"id": 1, "author": 5, "html": "<div class='chat-msg-text'>один</div>"},
+        {"id": "bad", "author": 5, "html": ""},
+        "мусор",
+    ]
     msgs = parse_messages(raw, my_id=9)
     assert [m["id"] for m in msgs] == [1, 2]
     assert [m["text"] for m in msgs] == ["один", "два"]
@@ -141,15 +154,22 @@ def test_list_chats(chat: FunPayChat, fake: FakeFunPayChatServer):
     assert "golden_key=goldenkey-test" in req.headers["cookie"] and "PHPSESSID=sess123" in req.headers["cookie"]
     assert req.headers["user-agent"] == "TestUA/1.0"
 
-    assert [c["chat_id"] for c in chats] == [5001001, 5001002, 5001003]   # сломанный элемент пропущен
+    assert [c["chat_id"] for c in chats] == [5001001, 5001002, 5001003]  # сломанный элемент пропущен
     a, b, c = chats
-    assert a == {"chat_id": 5001001, "name": "Buyer_One", "last_message_id": 910004, "last_user_message_id": 910003,
-                 "last_text": "Здравствуйте, аккаунт ещё в наличии?", "time": "12:34", "unread": True,
-                 "url": "https://funpay.com/chat/?node=5001001"}
+    assert a == {
+        "chat_id": 5001001,
+        "name": "Buyer_One",
+        "last_message_id": 910004,
+        "last_user_message_id": 910003,
+        "last_text": "Здравствуйте, аккаунт ещё в наличии?",
+        "time": "12:34",
+        "unread": True,
+        "url": "https://funpay.com/chat/?node=5001001",
+    }
     assert b["unread"] is False and b["name"] == "EuroTrader" and b["last_message_id"] == 910010
     assert b["last_text"] == "Спасибо, всё получил 👍"
     assert c["unread"] is False and c["last_message_id"] is None and c["last_user_message_id"] is None
-    assert c["url"] == "https://funpay.com/chat/?node=5001003"   # относительный href -> абсолютный
+    assert c["url"] == "https://funpay.com/chat/?node=5001003"  # относительный href -> абсолютный
 
     # повторный вызов не авторизуется заново
     chat.list_chats()
@@ -164,7 +184,7 @@ def test_list_chats_logged_out(chat: FunPayChat, fake: FakeFunPayChatServer):
 
 def test_list_chats_page_without_auth_block(chat: FunPayChat, fake: FakeFunPayChatServer):
     chat.source.login()
-    fake.logged_out = True   # главная уже не запрашивается, но страница чатов пришла без блока пользователя
+    fake.logged_out = True  # главная уже не запрашивается, но страница чатов пришла без блока пользователя
     with pytest.raises(AuthError, match="страница чатов без авторизации"):
         chat.list_chats()
 
@@ -187,7 +207,7 @@ def test_get_history(chat: FunPayChat, fake: FakeFunPayChatServer):
     assert first["text"] == "Привет! Аккаунт в наличии?" and first["ts"] == "06.10.2026 12:30:00"
 
     assert image["image_url"] == "https://funpay.com/uploads/chat/123.png" and image["text"] == ""
-    assert image["author"] == "Buyer_One"   # имя взято из первого сообщения серии
+    assert image["author"] == "Buyer_One"  # имя взято из первого сообщения серии
 
     assert mine["is_mine"] is True and mine["author_id"] == 777001 and mine["author"] == "TestSeller"
     assert mine["text"] == "Да, в наличии ✅" and BOT_MARK not in mine["text"]
@@ -277,7 +297,7 @@ def test_send_message_errors(chat: FunPayChat, fake: FakeFunPayChatServer):
     n = len(fake.requests)
     with pytest.raises(SourceError, match="пустое сообщение"):
         chat.send_message(5001001, "   ")
-    assert len(fake.requests) == n   # пустой текст не отправляется в сеть
+    assert len(fake.requests) == n  # пустой текст не отправляется в сеть
 
 
 def test_send_message_requires_auth(fake: FakeFunPayChatServer):

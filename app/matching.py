@@ -23,11 +23,13 @@
 Регулярные выражения (regex_any / regex_exclude) применяются к исходному тексту
 объявления (заголовок + описание + атрибуты) без учёта регистра.
 """
+
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from functools import lru_cache
-from typing import Any, Iterable, Optional
+from typing import Any
 
 from .models import Criteria, Listing, MatchResult, NumericRule
 
@@ -37,12 +39,28 @@ from .models import Criteria, Listing, MatchResult, NumericRule
 
 # Латинские буквы, внешне совпадающие с кириллическими, приводим к кириллице.
 # Нормализуются и текст, и условия, поэтому «E 100» (латиница) == «Е 100» (кириллица).
-_HOMOGLYPHS = str.maketrans({
-    "a": "а", "c": "с", "e": "е", "o": "о", "p": "р", "x": "х", "y": "у",
-    "ё": "е",
-    "«": '"', "»": '"', "“": '"', "”": '"', "„": '"', "’": "'", "‘": "'",
-    "–": "-", "—": "-", " ": " ",
-})
+_HOMOGLYPHS = str.maketrans(
+    {
+        "a": "а",
+        "c": "с",
+        "e": "е",
+        "o": "о",
+        "p": "р",
+        "x": "х",
+        "y": "у",
+        "ё": "е",
+        "«": '"',
+        "»": '"',
+        "“": '"',
+        "”": '"',
+        "„": '"',
+        "’": "'",
+        "‘": "'",
+        "–": "-",
+        "—": "-",
+        " ": " ",
+    }
+)
 _PUNCT = re.compile(r"[^\w\s]+")
 _WS = re.compile(r"\s+")
 
@@ -54,7 +72,7 @@ def _punct_repl(m: re.Match) -> str:
     if len(s) == 1 and s in ".,'":
         text = m.string
         i, j = m.start(), m.end()
-        if 0 < i and j < len(text):
+        if i > 0 and j < len(text):
             left, right = text[i - 1], text[j]
             if s == "'" and left.isalpha() and right.isalpha():
                 return s
@@ -81,20 +99,50 @@ def normalize(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 _REGION_SYNONYMS_RAW: dict[str, str] = {
-    "ru": "RU", "россия": "RU", "рф": "RU", "lesta": "RU", "леста": "RU", "лесты": "RU",
-    "ру": "RU", "снг": "RU", "cis": "RU", "russia": "RU", "lesta games": "RU", "ru lesta": "RU",
-    "eu": "EU", "европа": "EU", "europe": "EU", "евро": "EU", "wg eu": "EU", "eu wargaming": "EU",
-    "na": "NA", "америка": "NA", "сша": "NA", "usa": "NA", "us": "NA", "north america": "NA",
-    "америка na": "NA", "сев америка": "NA",
-    "asia": "ASIA", "азия": "ASIA", "sea": "ASIA", "asian": "ASIA", "apac": "ASIA", "sg": "ASIA",
-    "global": "GLOBAL", "глобал": "GLOBAL", "мир": "GLOBAL", "world": "GLOBAL", "any": "GLOBAL",
+    "ru": "RU",
+    "россия": "RU",
+    "рф": "RU",
+    "lesta": "RU",
+    "леста": "RU",
+    "лесты": "RU",
+    "ру": "RU",
+    "снг": "RU",
+    "cis": "RU",
+    "russia": "RU",
+    "lesta games": "RU",
+    "ru lesta": "RU",
+    "eu": "EU",
+    "европа": "EU",
+    "europe": "EU",
+    "евро": "EU",
+    "wg eu": "EU",
+    "eu wargaming": "EU",
+    "na": "NA",
+    "америка": "NA",
+    "сша": "NA",
+    "usa": "NA",
+    "us": "NA",
+    "north america": "NA",
+    "америка na": "NA",
+    "сев америка": "NA",
+    "asia": "ASIA",
+    "азия": "ASIA",
+    "sea": "ASIA",
+    "asian": "ASIA",
+    "apac": "ASIA",
+    "sg": "ASIA",
+    "global": "GLOBAL",
+    "глобал": "GLOBAL",
+    "мир": "GLOBAL",
+    "world": "GLOBAL",
+    "any": "GLOBAL",
     "любой": "GLOBAL",
 }
 # ключи приводим той же нормализацией, что и входные строки
 REGION_SYNONYMS: dict[str, str] = {normalize(k): v for k, v in _REGION_SYNONYMS_RAW.items()}
 
 
-def normalize_region(value: Any) -> Optional[str]:
+def normalize_region(value: Any) -> str | None:
     """Привести обозначение региона к коду: RU / EU / NA / ASIA / GLOBAL / <как есть>.
 
     Понимает синонимы («Россия», «Lesta», «Европа», «США», «Азия» ...) и строки вида
@@ -121,7 +169,7 @@ _WILD = "ωwildω"  # временная метка для «*» (состоит
 _LABEL_SEP = "=>"
 
 
-def _alt_pattern(alt: str) -> Optional[str]:
+def _alt_pattern(alt: str) -> str | None:
     """Собрать регулярное выражение для одного варианта слова (без «|»)."""
     alt = alt.strip()
     if not alt:
@@ -143,7 +191,7 @@ def _alt_pattern(alt: str) -> Optional[str]:
 def _compile_term(term: str) -> tuple[tuple[str, re.Pattern], ...]:
     """Условие «Подпись => а|б*|в г» -> кортеж (что показывать, скомпилированный шаблон)."""
     term = str(term)
-    label: Optional[str] = None
+    label: str | None = None
     if _LABEL_SEP in term:
         label, term = (x.strip() for x in term.split(_LABEL_SEP, 1))
         label = label or None
@@ -157,7 +205,7 @@ def _compile_term(term: str) -> tuple[tuple[str, re.Pattern], ...]:
     return tuple(out)
 
 
-def _match_norm(norm_text: str, term: str) -> Optional[str]:
+def _match_norm(norm_text: str, term: str) -> str | None:
     """Найти условие в уже нормализованном тексте. Возвращает совпавший вариант
     в том виде, как он записан в критериях (без «*»), либо None."""
     for shown, pat in _compile_term(term):
@@ -172,7 +220,7 @@ def match_text(text: str, term: str) -> bool:
 
 
 @lru_cache(maxsize=1024)
-def _compile_regex(pattern: str) -> Optional[re.Pattern]:
+def _compile_regex(pattern: str) -> re.Pattern | None:
     try:
         return re.compile(pattern, re.I | re.S)
     except re.error:
@@ -187,7 +235,7 @@ _NUM = re.compile(r"[-+]?(?:\d{1,3}(?:[  ]\d{3})+|\d+)(?:[.,]\d+)?")
 _THOUSANDS = re.compile(r"[-+]?\d{1,3}(?:,\d{3})+")
 
 
-def parse_number(value: Any) -> Optional[float]:
+def parse_number(value: Any) -> float | None:
     """Вытащить число из значения атрибута: 1234, "1 234 танка", "6,5k mmr" -> 6500."""
     if value is None or isinstance(value, bool):
         return None
@@ -205,7 +253,7 @@ def parse_number(value: Any) -> Optional[float]:
         v = float(num)
     except ValueError:
         return None
-    tail = s[m.end():m.end() + 2].lower()
+    tail = s[m.end() : m.end() + 2].lower()
     if tail[:1] in ("k", "к") and not tail[1:2].isalpha():
         v *= 1000
     elif tail[:1] in ("m", "м") and not tail[1:2].isalpha():
@@ -274,8 +322,8 @@ def _add_highlight(highlights: list[str], norm_forms: list[str], text: str) -> N
 # Главная функция
 # ---------------------------------------------------------------------------
 
-MUST_ANY_CAP = 5.0        # максимум баллов за must_any
-HIGHLIGHT_SCORE = 0.5     # балл за каждую найденную «фишку»
+MUST_ANY_CAP = 5.0  # максимум баллов за must_any
+HIGHLIGHT_SCORE = 0.5  # балл за каждую найденную «фишку»
 
 
 def evaluate(listing: Listing, criteria: Criteria) -> MatchResult:
@@ -410,12 +458,10 @@ def evaluate(listing: Listing, criteria: Criteria) -> MatchResult:
     else:
         score = max(score, 1.0)
     matched = not rejections
-    return MatchResult(matched=matched, score=score, reasons=reasons,
-                       rejections=rejections, highlights=highlights)
+    return MatchResult(matched=matched, score=score, reasons=reasons, rejections=rejections, highlights=highlights)
 
 
-def _apply_numeric(rule: NumericRule, attributes: dict[str, Any],
-                   reasons: list[str], rejections: list[str]) -> bool:
+def _apply_numeric(rule: NumericRule, attributes: dict[str, Any], reasons: list[str], rejections: list[str]) -> bool:
     """Применить числовое правило. True — поле найдено и укладывается в диапазон."""
     found, raw = get_attribute(attributes, rule.field)
     value = parse_number(raw) if found else None
@@ -439,6 +485,12 @@ def evaluate_many(listings: Iterable[Listing], criteria: Criteria) -> list[tuple
 
 
 __all__ = [
-    "evaluate", "evaluate_many", "match_text", "normalize", "normalize_region",
-    "parse_number", "get_attribute", "REGION_SYNONYMS",
+    "REGION_SYNONYMS",
+    "evaluate",
+    "evaluate_many",
+    "get_attribute",
+    "match_text",
+    "normalize",
+    "normalize_region",
+    "parse_number",
 ]

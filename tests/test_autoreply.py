@@ -1,4 +1,5 @@
 """Тесты автоответчика: фейковый клиент чата (без сети), реальное хранилище и файл состояния во временной папке."""
+
 from __future__ import annotations
 
 import json
@@ -20,13 +21,29 @@ from app.storage import Storage
 
 
 def msg(id_: int, text: str, mine: bool = False, system: bool = False, author: str = "Buyer") -> dict:
-    return {"id": id_, "author_id": 1 if mine else (0 if system else 5001), "author": "TestSeller" if mine else author,
-            "text": text, "is_mine": mine, "system": system, "image_url": None, "ts": None}
+    return {
+        "id": id_,
+        "author_id": 1 if mine else (0 if system else 5001),
+        "author": "TestSeller" if mine else author,
+        "text": text,
+        "is_mine": mine,
+        "system": system,
+        "image_url": None,
+        "ts": None,
+    }
 
 
 def chat_item(chat_id: int, name: str, last_id: int | None, text: str, unread: bool = True) -> dict:
-    return {"chat_id": chat_id, "name": name, "last_message_id": last_id, "last_user_message_id": None,
-            "last_text": text, "time": "12:00", "unread": unread, "url": f"https://funpay.com/chat/?node={chat_id}"}
+    return {
+        "chat_id": chat_id,
+        "name": name,
+        "last_message_id": last_id,
+        "last_user_message_id": None,
+        "last_text": text,
+        "time": "12:00",
+        "unread": unread,
+        "url": f"https://funpay.com/chat/?node={chat_id}",
+    }
 
 
 class FakeChat:
@@ -105,14 +122,18 @@ def env(monkeypatch):
     ctx = _make_ctx(monkeypatch, tmp)
     fake = FakeChat(
         chats=[
-            chat_item(101, "Buyer_One", 1003, "Здравствуйте, аккаунт ещё в наличии?"),        # ключевое слово
-            chat_item(102, "Buyer_Two", 2002, "Какой сервер?"),                                 # приветствие
-            chat_item(103, "Reader", 3001, "Спасибо", unread=False),                            # прочитан
-            chat_item(104, "Answered", 4002, "Да, в наличии"),                                  # последнее — наше
-            chat_item(105, "SystemOnly", 5001, "Покупатель оплатил заказ"),                     # системное
+            chat_item(101, "Buyer_One", 1003, "Здравствуйте, аккаунт ещё в наличии?"),  # ключевое слово
+            chat_item(102, "Buyer_Two", 2002, "Какой сервер?"),  # приветствие
+            chat_item(103, "Reader", 3001, "Спасибо", unread=False),  # прочитан
+            chat_item(104, "Answered", 4002, "Да, в наличии"),  # последнее — наше
+            chat_item(105, "SystemOnly", 5001, "Покупатель оплатил заказ"),  # системное
         ],
         histories={
-            101: [msg(1001, "Привет"), msg(1002, "Отвечу позже", mine=True), msg(1003, "Здравствуйте, аккаунт ещё в наличии?")],
+            101: [
+                msg(1001, "Привет"),
+                msg(1002, "Отвечу позже", mine=True),
+                msg(1003, "Здравствуйте, аккаунт ещё в наличии?"),
+            ],
             102: [msg(2001, "Привет"), msg(2002, "Какой сервер?")],
             103: [msg(3001, "Спасибо")],
             104: [msg(4001, "В наличии?"), msg(4002, "Да, в наличии", mine=True)],
@@ -142,7 +163,7 @@ def test_pick_reply_rules():
 def test_preview_reply_uses_settings(env):
     ctx, fake, svc, _ = env
     assert svc.preview_reply("Аккаунт актуально?") == "Да, в наличии ✅"
-    assert svc.preview_reply("Есть скидка?") == "Да, в наличии ✅"   # первое подходящее правило по порядку
+    assert svc.preview_reply("Есть скидка?") == "Да, в наличии ✅"  # первое подходящее правило по порядку
     assert svc.preview_reply("Сделаете дешевле?") == "Скидок нет"
     assert svc.preview_reply("Какой сервер?") == "Здравствуйте! Аккаунт в наличии ✅"
     ctx.settings.autoreply.greeting = ""
@@ -246,7 +267,7 @@ def test_throttle_once_per_chat(env):
 
 
 def test_our_reply_is_not_answered_again(env):
-    ctx, fake, svc, _ = env
+    _ctx, fake, svc, _ = env
     svc.run_once()
     sent_id = fake.last_sent_message_id
     # runner сообщает, что чат изменился: последнее сообщение — наш только что отправленный ответ
@@ -254,15 +275,21 @@ def test_our_reply_is_not_answered_again(env):
     n = len(fake.calls)
     res = svc.run_once()
     assert res["checked"] == 1 and res["replied"] == 0
-    assert ("history", 102) not in fake.calls[n:]   # без лишнего запроса истории
+    assert ("history", 102) not in fake.calls[n:]  # без лишнего запроса истории
 
 
 def test_disabled_makes_no_calls(env):
     ctx, fake, svc, state_file = env
     ctx.settings.autoreply.enabled = False
     res = svc.run_once()
-    assert res == {"checked": 0, "replied": 0, "notified": 0, "throttled": 0, "errors": [],
-                   "skipped": "автоответчик выключен"}
+    assert res == {
+        "checked": 0,
+        "replied": 0,
+        "notified": 0,
+        "throttled": 0,
+        "errors": [],
+        "skipped": "автоответчик выключен",
+    }
     assert fake.calls == [] and not state_file.exists()
     assert svc.status()["active"] is False
 
@@ -331,7 +358,7 @@ def test_state_survives_restart(env, monkeypatch):
 
 
 def test_concurrent_run_is_skipped(env):
-    ctx, fake, svc, _ = env
+    _ctx, fake, svc, _ = env
     svc._busy.acquire()
     try:
         assert svc.run_once()["skipped"] == "уже выполняется"
@@ -346,12 +373,12 @@ def test_thread_start_stop(env):
     ctx.settings.autoreply.poll_seconds = 1
     svc.start()
     thread = svc._thread
-    svc.start()                      # повторный start не создаёт второй поток
+    svc.start()  # повторный start не создаёт второй поток
     assert svc._thread is thread
     deadline = time.time() + 5
     while time.time() < deadline and len(fake.sent) < 2:
         time.sleep(0.05)
-    assert len(fake.sent) == 2       # первый цикл выполнился из фонового потока
+    assert len(fake.sent) == 2  # первый цикл выполнился из фонового потока
     assert svc.status()["thread_alive"] is True and svc.status()["next_run"]
     svc.stop()
     assert not thread.is_alive()

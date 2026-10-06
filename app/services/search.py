@@ -1,9 +1,10 @@
 """Сервис поиска: обходит источники по профилям, применяет критерии, сохраняет находки."""
+
 from __future__ import annotations
 
 import threading
 import traceback
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from ..matching import evaluate
 from ..models import Found, FoundStatus, MatchResult, Profile, SearchRunStats, utcnow
@@ -12,20 +13,28 @@ from .context import AppContext
 
 
 class SearchService:
-    def __init__(self, ctx: AppContext):
+    def __init__(self, ctx: AppContext) -> None:
         self.ctx = ctx
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._cancel = threading.Event()
         self._lock = threading.Lock()
-        self.progress: dict = {"profile_id": None, "profile_name": None, "source": None,
-                               "fetched": 0, "matched": 0, "new": 0, "done": 0, "total": 0}
+        self.progress: dict = {
+            "profile_id": None,
+            "profile_name": None,
+            "source": None,
+            "fetched": 0,
+            "matched": 0,
+            "new": 0,
+            "done": 0,
+            "total": 0,
+        }
         self.last: list[SearchRunStats] = []
-        self.last_started: Optional[str] = None
-        self.last_finished: Optional[str] = None
+        self.last_started: str | None = None
+        self.last_finished: str | None = None
         # вызывается после каждой задачи (профиль+источник) со списком НОВЫХ подходящих находок
-        self.on_new_candidates: Optional[Callable[[Profile, list[Found]], None]] = None
+        self.on_new_candidates: Callable[[Profile, list[Found]], None] | None = None
         # вызывается по завершении всего прогона со статистикой
-        self.on_finished: Optional[Callable[[list[SearchRunStats]], None]] = None
+        self.on_finished: Callable[[list[SearchRunStats]], None] | None = None
 
     # ----------------------------------------------------------- state
     @property
@@ -45,37 +54,39 @@ class SearchService:
         self._cancel.set()
 
     # ----------------------------------------------------------- start
-    def start(self, profile_ids: Optional[list[str]] = None, sources: Optional[list[str]] = None) -> bool:
+    def start(self, profile_ids: list[str] | None = None, sources: list[str] | None = None) -> bool:
         with self._lock:
             if self.running:
                 return False
             self._cancel.clear()
-            self._thread = threading.Thread(target=self._run_safe, args=(profile_ids, sources),
-                                            name="search", daemon=True)
+            self._thread = threading.Thread(
+                target=self._run_safe, args=(profile_ids, sources), name="search", daemon=True
+            )
             self._thread.start()
             return True
 
-    def run_sync(self, profile_ids: Optional[list[str]] = None, sources: Optional[list[str]] = None) -> list[SearchRunStats]:
+    def run_sync(self, profile_ids: list[str] | None = None, sources: list[str] | None = None) -> list[SearchRunStats]:
         """Синхронный запуск (для тестов и автопоиска из монитора)."""
         self._cancel.clear()
         return self._run(profile_ids, sources)
 
-    def _run_safe(self, profile_ids, sources):
+    def _run_safe(self, profile_ids: list[str] | None, sources: list[str] | None) -> None:
         try:
             self._run(profile_ids, sources)
-        except Exception as e:  # noqa: BLE001
-            self.ctx.log("search", f"поиск аварийно завершён: {e}", level="error",
-                         data={"trace": traceback.format_exc()[-2000:]})
+        except Exception as e:
+            self.ctx.log(
+                "search", f"поиск аварийно завершён: {e}", level="error", data={"trace": traceback.format_exc()[-2000:]}
+            )
 
     # ------------------------------------------------------------- run
-    def _select_profiles(self, profile_ids: Optional[list[str]]) -> list[Profile]:
+    def _select_profiles(self, profile_ids: list[str] | None) -> list[Profile]:
         profiles = self.ctx.profiles.list()
         if profile_ids:
             wanted = set(profile_ids)
             return [p for p in profiles if p.id in wanted]
         return [p for p in profiles if p.enabled]
 
-    def _run(self, profile_ids, sources) -> list[SearchRunStats]:
+    def _run(self, profile_ids: list[str] | None, sources: list[str] | None) -> list[SearchRunStats]:
         self.last_started = utcnow().isoformat()
         self.last_finished = None
         profiles = self._select_profiles(profile_ids)
@@ -85,14 +96,17 @@ class SearchService:
         for name in list(wanted_sources):
             if not has_creds.get(name):
                 wanted_sources.discard(name)
-                self.ctx.log("search", f"{name}: не задан токен/cookie в настройках — источник пропущен", level="warning")
+                self.ctx.log(
+                    "search", f"{name}: не задан токен/cookie в настройках — источник пропущен", level="warning"
+                )
         jobs: list[tuple[Profile, str]] = []
         for p in profiles:
             try:
                 fp_enabled, lz_enabled = p.funpay().enabled, p.lolz().enabled
-            except Exception as e:  # noqa: BLE001 — некорректный YAML одного профиля не должен ломать остальные
-                self.ctx.log("search", f"{p.name}: некорректные настройки источников — профиль пропущен ({e})",
-                             level="error")
+            except Exception as e:
+                self.ctx.log(
+                    "search", f"{p.name}: некорректные настройки источников — профиль пропущен ({e})", level="error"
+                )
                 continue
             if "funpay" in wanted_sources and fp_enabled:
                 jobs.append((p, "funpay"))
@@ -107,8 +121,16 @@ class SearchService:
                 self.ctx.log("search", "поиск отменён пользователем", level="warning")
                 break
             stats = SearchRunStats(profile_id=profile.id, source=source_name)
-            self.progress.update({"profile_id": profile.id, "profile_name": profile.name, "source": source_name,
-                                  "fetched": 0, "matched": 0, "new": 0})
+            self.progress.update(
+                {
+                    "profile_id": profile.id,
+                    "profile_name": profile.name,
+                    "source": source_name,
+                    "fetched": 0,
+                    "matched": 0,
+                    "new": 0,
+                }
+            )
             try:
                 source = self.ctx.source(source_name)
                 listings = source.search(profile)
@@ -129,11 +151,14 @@ class SearchService:
                 if new_candidates and self.on_new_candidates:
                     try:
                         self.on_new_candidates(profile, new_candidates)
-                    except Exception as e:  # noqa: BLE001
+                    except Exception as e:
                         self.ctx.log("search", f"обработчик новых находок: {e}", level="error")
-                self.ctx.log("search", f"{profile.name} / {source_name}: получено {stats.fetched}, "
-                                       f"подходит {stats.matched}, новых {stats.new}")
-            except Exception as e:  # noqa: BLE001
+                self.ctx.log(
+                    "search",
+                    f"{profile.name} / {source_name}: получено {stats.fetched}, "
+                    f"подходит {stats.matched}, новых {stats.new}",
+                )
+            except Exception as e:
                 msg = f"{profile.name} / {source_name}: {e}"
                 stats.errors.append(str(e))
                 self.ctx.log("search", msg, level="error")
@@ -147,22 +172,27 @@ class SearchService:
         if self.on_finished:
             try:
                 self.on_finished(stats_all)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 self.ctx.log("search", f"обработчик завершения поиска: {e}", level="error")
         return stats_all
 
     def _process(self, profile: Profile, listing) -> tuple[Found, bool]:
         try:
             match: MatchResult = evaluate(listing, profile.criteria)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             match = MatchResult(matched=False, rejections=[f"ошибка критериев: {e}"])
         suggested = None
         if match.matched:
             try:
                 suggested = calculate_price(listing.price, profile.pricing)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 match.rejections.append(f"ошибка расчёта цены: {e}")
                 match.matched = False
-        found = Found(profile_id=profile.id, listing=listing, match=match, suggested_price=suggested,
-                      status=FoundStatus.CANDIDATE if match.matched else FoundStatus.REJECTED)
+        found = Found(
+            profile_id=profile.id,
+            listing=listing,
+            match=match,
+            suggested_price=suggested,
+            status=FoundStatus.CANDIDATE if match.matched else FoundStatus.REJECTED,
+        )
         return self.ctx.storage.upsert_found(found)

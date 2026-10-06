@@ -1,4 +1,5 @@
 """Тесты Telegram-уведомлений: форматирование сообщений и отправка через httpx.MockTransport (без сети)."""
+
 from __future__ import annotations
 
 import json
@@ -45,28 +46,62 @@ def settings() -> TelegramSettings:
     return TelegramSettings(enabled=True, bot_token="123:ABC", chat_id="42")
 
 
-def _found(i: int = 1, title: str = "Аккаунт WoT все топы", price: float = 15000, suggested: float | None = 29000,
-           source: str = "funpay", seller_url: str | None = "https://funpay.com/users/10/",
-           seller_name: str | None = "seller1", highlights: list[str] | None = None) -> Found:
+def _found(
+    i: int = 1,
+    title: str = "Аккаунт WoT все топы",
+    price: float = 15000,
+    suggested: float | None = 29000,
+    source: str = "funpay",
+    seller_url: str | None = "https://funpay.com/users/10/",
+    seller_name: str | None = "seller1",
+    highlights: list[str] | None = None,
+) -> Found:
     return Found(
-        id=i, profile_id="wot",
-        listing=Listing(source=source, source_id=str(i), url=f"https://funpay.com/lots/offer?id={i}", title=title,
-                        price=price, seller_name=seller_name, seller_url=seller_url),
-        match=MatchResult(matched=True, score=3, highlights=highlights if highlights is not None else ["Chieftain", "Об. 279"]),
+        id=i,
+        profile_id="wot",
+        listing=Listing(
+            source=source,
+            source_id=str(i),
+            url=f"https://funpay.com/lots/offer?id={i}",
+            title=title,
+            price=price,
+            seller_name=seller_name,
+            seller_url=seller_url,
+        ),
+        match=MatchResult(
+            matched=True, score=3, highlights=highlights if highlights is not None else ["Chieftain", "Об. 279"]
+        ),
         suggested_price=suggested,
     )
 
 
 def _lot(status: LotStatus = LotStatus.DEACTIVATED) -> OurLot:
-    return OurLot(id=7, found_id=1, profile_id="wot", funpay_lot_id=777, funpay_url="https://funpay.com/lots/offer?id=777",
-                  title_ru="WoT | Chieftain, Об. 279 | RU", price=29000, source_price=15000,
-                  source_url="https://lzt.market/123", status=status)
+    return OurLot(
+        id=7,
+        found_id=1,
+        profile_id="wot",
+        funpay_lot_id=777,
+        funpay_url="https://funpay.com/lots/offer?id=777",
+        title_ru="WoT | Chieftain, Об. 279 | RU",
+        price=29000,
+        source_price=15000,
+        source_url="https://lzt.market/123",
+        status=status,
+    )
 
 
 def _order() -> Order:
-    return Order(funpay_order_id="ABCDEFGH", status=OrderStatus.PAID, title="WoT | Chieftain, Об. 279 | RU",
-                 subcategory_name="Аккаунты", price=29000, buyer_name="buyer<1>", buyer_id="55",
-                 buyer_url="https://funpay.com/users/55/", order_url="https://funpay.com/orders/ABCDEFGH/")
+    return Order(
+        funpay_order_id="ABCDEFGH",
+        status=OrderStatus.PAID,
+        title="WoT | Chieftain, Об. 279 | RU",
+        subcategory_name="Аккаунты",
+        price=29000,
+        buyer_name="buyer<1>",
+        buyer_id="55",
+        buyer_url="https://funpay.com/users/55/",
+        order_url="https://funpay.com/orders/ABCDEFGH/",
+    )
 
 
 # ------------------------------------------------------------------ helpers
@@ -88,7 +123,7 @@ def test_esc_and_trim():
 
 
 def test_truncate_html_keeps_markup_valid():
-    text = "<b>Заголовок</b> <a href=\"https://x\">" + "x" * 5000 + "</a> хвост"
+    text = '<b>Заголовок</b> <a href="https://x">' + "x" * 5000 + "</a> хвост"
     out = truncate_html(text, MAX_TEXT)
     assert len(out) <= MAX_TEXT
     assert out.endswith("…</a>")
@@ -110,7 +145,9 @@ def test_truncate_html_keeps_markup_valid():
 def test_format_candidates_escapes_and_links(settings):
     n, _ = make_notifier(settings)
     f1 = _found(1, title="<b>Chieftain</b> & Об. 279 аккаунт", seller_name="evil<script>")
-    f2 = _found(2, title="Lolz аккаунт", source="lolz", suggested=None, seller_url=None, seller_name=None, highlights=[])
+    f2 = _found(
+        2, title="Lolz аккаунт", source="lolz", suggested=None, seller_url=None, seller_name=None, highlights=[]
+    )
     text = n.format_candidates("WoT RU", [f1, f2])
     assert "Новые аккаунты: WoT RU (2)" in text
     # пользовательский HTML экранирован
@@ -189,8 +226,10 @@ def test_format_error_and_search_summary(settings):
     assert "<code>golden_key &amp; cookie протухли</code>" in text
     assert n.format_error("x") == "❌ <b>x</b>"
 
-    stats = [SearchRunStats(profile_id="wot", source="funpay", fetched=50, matched=5, new=2),
-             SearchRunStats(profile_id="wot", source="lolz", fetched=30, matched=1, new=0, errors=["timeout <x>"])]
+    stats = [
+        SearchRunStats(profile_id="wot", source="funpay", fetched=50, matched=5, new=2),
+        SearchRunStats(profile_id="wot", source="lolz", fetched=30, matched=1, new=0, errors=["timeout <x>"]),
+    ]
     text = n.format_search_summary(stats, profile_names={"wot": "WoT <RU>"})
     assert "Поиск завершён" in text
     assert "WoT &lt;RU&gt; [FunPay]: просмотрено 50, подошло 5, новых <b>2</b>" in text
@@ -236,11 +275,13 @@ def test_send_truncates_long_text(settings):
 
 
 def test_send_failure_returns_false(settings):
-    n, tg = make_notifier(settings, Telegram(status=400, body={"ok": False, "description": "Bad Request: chat not found"}))
+    n, _tg = make_notifier(
+        settings, Telegram(status=400, body={"ok": False, "description": "Bad Request: chat not found"})
+    )
     assert n.send("hi") is False
     assert n.last_error == "Bad Request: chat not found"
 
-    n, tg = make_notifier(settings, Telegram(exc=httpx.ConnectError("no network")))
+    n, _tg = make_notifier(settings, Telegram(exc=httpx.ConnectError("no network")))
     assert n.send("hi") is False
     assert "no network" in (n.last_error or "")
 
@@ -250,7 +291,7 @@ def test_send_failure_returns_false(settings):
             self.requests.append(request)
             return httpx.Response(502, text="<html>bad gateway</html>")
 
-    n, tg = make_notifier(settings, Weird())
+    n, _tg = make_notifier(settings, Weird())
     assert n.send("hi") is False and "502" in (n.last_error or "")
 
 
@@ -293,7 +334,7 @@ def test_settings_getter_applies_changes_live():
 
 
 def test_rate_limit_between_messages(settings, monkeypatch):
-    n, tg = make_notifier(settings)
+    n, _tg = make_notifier(settings)
     n.min_interval = 1.0
     sleeps: list[float] = []
     monkeypatch.setattr("app.notify.time.sleep", lambda s: sleeps.append(s))
@@ -302,7 +343,9 @@ def test_rate_limit_between_messages(settings, monkeypatch):
 
 
 def test_test_connection(settings):
-    n, tg = make_notifier(settings, Telegram(body={"ok": True, "result": {"id": 1, "is_bot": True, "username": "my_bot"}}))
+    n, tg = make_notifier(
+        settings, Telegram(body={"ok": True, "result": {"id": 1, "is_bot": True, "username": "my_bot"}})
+    )
     info = n.test_connection()
     assert info == {"ok": True, "error": None, "bot_name": "my_bot"}
     assert str(tg.requests[0].url) == "https://api.telegram.org/bot123:ABC/getMe" and tg.requests[0].method == "GET"
@@ -318,7 +361,8 @@ def test_test_connection(settings):
     assert n.test_connection()["ok"] is False and tg.requests == []
 
     # токен валиден, но chat_id не задан — ok, но с подсказкой
-    n, _ = make_notifier(TelegramSettings(bot_token="123:ABC", chat_id=""),
-                         Telegram(body={"ok": True, "result": {"username": "b"}}))
+    n, _ = make_notifier(
+        TelegramSettings(bot_token="123:ABC", chat_id=""), Telegram(body={"ok": True, "result": {"username": "b"}})
+    )
     info = n.test_connection()
     assert info["ok"] is True and "chat_id" in info["error"]

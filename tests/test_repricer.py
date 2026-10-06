@@ -1,4 +1,5 @@
 """Тесты переоценки: реальное хранилище во временной БД, профиль во временной папке, фейковый FunPay (без сети)."""
+
 from __future__ import annotations
 
 import tempfile
@@ -52,32 +53,71 @@ def _make_ctx(monkeypatch, auto_reprice: bool = True, min_change: float = 3.0) -
     settings.monitor.auto_reprice = auto_reprice
     settings.monitor.reprice_min_change_percent = min_change
     store = ProfileStore(tmp / "profiles")
-    store.save(Profile(id="wot", name="WoT", game="wot", region="RU",
-                       pricing={"mode": "formula", "formula": "price * 2 - 1000", "round_to": 100}))
+    store.save(
+        Profile(
+            id="wot",
+            name="WoT",
+            game="wot",
+            region="RU",
+            pricing={"mode": "formula", "formula": "price * 2 - 1000", "round_to": 100},
+        )
+    )
     ctx = AppContext(settings=settings, storage=Storage(tmp / "db.sqlite"), profiles=store)
     ctx._funpay = FakeFunPay()
     ctx._notifier = FakeNotifier()
     return ctx
 
 
-def _found(ctx: AppContext, price: float, source_id: str = "1", status: FoundStatus = FoundStatus.CANDIDATE,
-           suggested: float | None = None, profile_id: str = "wot") -> Found:
+def _found(
+    ctx: AppContext,
+    price: float,
+    source_id: str = "1",
+    status: FoundStatus = FoundStatus.CANDIDATE,
+    suggested: float | None = None,
+    profile_id: str = "wot",
+) -> Found:
     """Создать/обновить найденное объявление (повторный вызов с той же source_id меняет цену исходника)."""
-    found, _ = ctx.storage.upsert_found(Found(
-        profile_id=profile_id, status=status, suggested_price=suggested,
-        listing=Listing(source="lolz", source_id=source_id, url=f"https://lzt.market/{source_id}",
-                        title="WoT все топы", price=price),
-        match=MatchResult(matched=True, score=2)))
+    found, _ = ctx.storage.upsert_found(
+        Found(
+            profile_id=profile_id,
+            status=status,
+            suggested_price=suggested,
+            listing=Listing(
+                source="lolz",
+                source_id=source_id,
+                url=f"https://lzt.market/{source_id}",
+                title="WoT все топы",
+                price=price,
+            ),
+            match=MatchResult(matched=True, score=2),
+        )
+    )
     return found
 
 
-def _lot(ctx: AppContext, found: Found, price: float = 29000, source_price: float = 15000,
-         status: LotStatus = LotStatus.ACTIVE, funpay_lot_id: int | None = 777, profile_id: str = "wot") -> OurLot:
-    return ctx.storage.save_lot(OurLot(
-        found_id=found.id, profile_id=profile_id, funpay_lot_id=funpay_lot_id, subcategory_id=148,
-        funpay_url=f"https://funpay.com/lots/offer?id={funpay_lot_id}" if funpay_lot_id else None,
-        title_ru="WoT | все топы | RU", price=price, source_price=source_price, source_url=found.listing.url,
-        status=status))
+def _lot(
+    ctx: AppContext,
+    found: Found,
+    price: float = 29000,
+    source_price: float = 15000,
+    status: LotStatus = LotStatus.ACTIVE,
+    funpay_lot_id: int | None = 777,
+    profile_id: str = "wot",
+) -> OurLot:
+    return ctx.storage.save_lot(
+        OurLot(
+            found_id=found.id,
+            profile_id=profile_id,
+            funpay_lot_id=funpay_lot_id,
+            subcategory_id=148,
+            funpay_url=f"https://funpay.com/lots/offer?id={funpay_lot_id}" if funpay_lot_id else None,
+            title_ru="WoT | все топы | RU",
+            price=price,
+            source_price=source_price,
+            source_url=found.listing.url,
+            status=status,
+        )
+    )
 
 
 @pytest.fixture()
@@ -91,8 +131,8 @@ def env(monkeypatch):
 
 # ------------------------------------------------------------ auto mode
 def test_active_lot_repriced_pushed_logged_notified(env):
-    ctx, found, lot, svc = env
-    _found(ctx, 13500, status=FoundStatus.PUBLISHED)   # исходник подешевел на 10%
+    ctx, _, lot, svc = env
+    _found(ctx, 13500, status=FoundStatus.PUBLISHED)  # исходник подешевел на 10%
     res = svc.run()
     assert res["errors"] == []
     assert res["checked"] == 1 and res["repriced"] == 1 and res["skipped"] == 0 and res["notified"] == 0
@@ -126,8 +166,8 @@ def test_active_lot_repriced_pushed_logged_notified(env):
 
 
 def test_change_below_threshold_is_skipped(env):
-    ctx, found, lot, svc = env
-    _found(ctx, 15300, status=FoundStatus.PUBLISHED)   # +2% < 3%
+    ctx, _, lot, svc = env
+    _found(ctx, 15300, status=FoundStatus.PUBLISHED)  # +2% < 3%
     res = svc.run()
     assert res == {"checked": 1, "repriced": 0, "notified": 0, "suggested_updated": 0, "skipped": 1, "errors": []}
     saved = ctx.storage.get_lot(lot.id)
@@ -137,8 +177,8 @@ def test_change_below_threshold_is_skipped(env):
 
 
 def test_price_increase_above_threshold(env):
-    ctx, found, lot, svc = env
-    _found(ctx, 20000, status=FoundStatus.PUBLISHED)   # +33%
+    ctx, _, lot, svc = env
+    _found(ctx, 20000, status=FoundStatus.PUBLISHED)  # +33%
     res = svc.run()
     assert res["repriced"] == 1
     assert ctx.storage.get_lot(lot.id).price == 39000
@@ -150,7 +190,7 @@ def test_same_resulting_price_only_updates_source_price(monkeypatch):
     found = _found(ctx, 15000, status=FoundStatus.PUBLISHED)
     lot = _lot(ctx, found)
     svc = RepricerService(ctx, PublisherService(ctx))
-    _found(ctx, 15020, status=FoundStatus.PUBLISHED)   # +0.13% >= 0.1%; 15020*2-1000=29040 -> 29000 (та же цена)
+    _found(ctx, 15020, status=FoundStatus.PUBLISHED)  # +0.13% >= 0.1%; 15020*2-1000=29040 -> 29000 (та же цена)
     res = svc.run()
     assert res["repriced"] == 0 and res["skipped"] == 1 and res["errors"] == []
     saved = ctx.storage.get_lot(lot.id)
@@ -199,7 +239,7 @@ def test_sold_and_error_lots_are_ignored(monkeypatch):
     svc = RepricerService(ctx, PublisherService(ctx))
     res = svc.run()
     assert res["checked"] == 0 and res["repriced"] == 0
-    assert {l.price for l in ctx.storage.list_lots()} == {29000}
+    assert {x.price for x in ctx.storage.list_lots()} == {29000}
 
 
 def test_funpay_push_failure_is_retried_and_not_duplicated(monkeypatch):
@@ -216,8 +256,11 @@ def test_funpay_push_failure_is_retried_and_not_duplicated(monkeypatch):
     # цена в базе возвращена к прежней (как на FunPay), source_price не обновлён — повторим позже, ошибка видна
     assert saved.price == 29000 and saved.source_price == 15000 and "сессия протухла" in saved.error
     assert ctx._notifier.sent == []
-    assert any(e["level"] == "error" and "не удалось отправить" in e["message"]
-               for e in ctx.storage.events() if e["kind"] == "reprice")
+    assert any(
+        e["level"] == "error" and "не удалось отправить" in e["message"]
+        for e in ctx.storage.events()
+        if e["kind"] == "reprice"
+    )
 
     # FunPay ожил — повтор проходит, уведомление одно
     ctx._funpay = FakeFunPay()
@@ -280,10 +323,10 @@ def test_notifier_failure_does_not_raise(monkeypatch):
 # ----------------------------------------------------------- candidates
 def test_candidate_suggested_price_refreshed(monkeypatch):
     ctx = _make_ctx(monkeypatch)
-    stale = _found(ctx, 13500, source_id="c1", suggested=29000)      # устарела (должно быть 26000)
-    fresh = _found(ctx, 15000, source_id="c2", suggested=29000)      # верная
-    close = _found(ctx, 15000, source_id="c3", suggested=29000.4)    # расхождение < 1 ₽ — не трогаем
-    none = _found(ctx, 10000, source_id="c4", suggested=None)        # не задана
+    stale = _found(ctx, 13500, source_id="c1", suggested=29000)  # устарела (должно быть 26000)
+    fresh = _found(ctx, 15000, source_id="c2", suggested=29000)  # верная
+    close = _found(ctx, 15000, source_id="c3", suggested=29000.4)  # расхождение < 1 ₽ — не трогаем
+    none = _found(ctx, 10000, source_id="c4", suggested=None)  # не задана
     ignored = _found(ctx, 10000, source_id="c5", status=FoundStatus.IGNORED, suggested=1)  # не кандидат
     with_lot = _found(ctx, 10000, source_id="c6", suggested=1)
     _lot(ctx, with_lot, status=LotStatus.DRAFT, funpay_lot_id=None, source_price=10000, price=19000)
@@ -305,7 +348,8 @@ def test_candidate_refresh_after_pricing_rule_change(monkeypatch):
     ctx = _make_ctx(monkeypatch)
     c = _found(ctx, 10000, suggested=19000)
     p = ctx.profiles.get("wot")
-    p.pricing.mode = "percent"; p.pricing.percent = 50
+    p.pricing.mode = "percent"
+    p.pricing.percent = 50
     ctx.profiles.save(p)
     svc = RepricerService(ctx, PublisherService(ctx))
     assert svc.run()["suggested_updated"] == 1
@@ -316,8 +360,9 @@ def test_candidate_refresh_after_pricing_rule_change(monkeypatch):
 def test_missing_found_and_profile_produce_errors_not_exceptions(monkeypatch):
     ctx = _make_ctx(monkeypatch)
     good = _found(ctx, 15000, source_id="g", status=FoundStatus.PUBLISHED)
-    dangling = ctx.storage.save_lot(OurLot(found_id=999999, profile_id="wot", price=1, source_price=1,
-                                           source_url="x", status=LotStatus.ACTIVE))
+    dangling = ctx.storage.save_lot(
+        OurLot(found_id=999999, profile_id="wot", price=1, source_price=1, source_url="x", status=LotStatus.ACTIVE)
+    )
     orphan_found = _found(ctx, 15000, source_id="o", status=FoundStatus.PUBLISHED, profile_id="nope")
     orphan = _lot(ctx, orphan_found, profile_id="nope")
     cand = _found(ctx, 15000, source_id="cand", profile_id="nope", suggested=1)
@@ -341,18 +386,18 @@ def test_missing_found_and_profile_produce_errors_not_exceptions(monkeypatch):
     res = svc.run()
     assert len(res["errors"]) == 3
     n_events2 = len([e for e in ctx.storage.events() if e["kind"] == "reprice" and e["level"] in ("error", "warning")])
-    assert n_events2 == n_events + 1   # только итоговая строка «переоценка: ... ошибок 3»
+    assert n_events2 == n_events + 1  # только итоговая строка «переоценка: ... ошибок 3»
 
 
 def test_storage_failure_does_not_raise(env):
-    ctx, found, lot, svc = env
+    ctx, _, _, svc = env
     ctx.storage.list_lots = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db locked"))  # type: ignore[method-assign]
     res = svc.run()
     assert res["repriced"] == 0 and any("db locked" in e for e in res["errors"])
 
 
 def test_busy_guard(env):
-    ctx, found, lot, svc = env
+    _, _, _, svc = env
     svc._busy.acquire()
     try:
         res = svc.run()
@@ -381,8 +426,17 @@ def test_price_trend(monkeypatch):
 
 # --------------------------------------------------------------- format
 def test_format_reprice_escapes_html():
-    lot = OurLot(id=5, found_id=1, profile_id="wot", title_ru="WoT <b>&</b> топы", price=29000, source_price=15000,
-                 source_url="https://lzt.market/1?a=1&b=2", funpay_url=None, status=LotStatus.DRAFT)
+    lot = OurLot(
+        id=5,
+        found_id=1,
+        profile_id="wot",
+        title_ru="WoT <b>&</b> топы",
+        price=29000,
+        source_price=15000,
+        source_url="https://lzt.market/1?a=1&b=2",
+        funpay_url=None,
+        status=LotStatus.DRAFT,
+    )
     text = format_reprice(lot, 15000, 13500, 29000, 26000)
     assert "WoT &lt;b&gt;&amp;&lt;/b&gt; топы" in text and "a=1&amp;b=2" in text and "Наш лот: #5" in text
     assert "15 000 ₽ → <b>13 500 ₽</b> (-10%)" in text

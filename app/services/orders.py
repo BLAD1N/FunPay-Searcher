@@ -6,11 +6,12 @@
   3. ``storage.upsert_order``; для НОВЫХ оплаченных заказов — уведомление в Telegram и пометка лота как проданного.
 FunPay сам снимает лот после продажи (deactivate_after_sale), поэтому запросов к FunPay здесь нет.
 """
+
 from __future__ import annotations
 
 import threading
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any
 
 from ..models import LotStatus, Order, OrderStatus, OurLot, utcnow
 from ..notify import TelegramNotifier
@@ -29,7 +30,7 @@ _STATUS_RANK = {
 }
 
 
-def _normalize(text: Optional[str]) -> str:
+def _normalize(text: str | None) -> str:
     """casefold + схлопывание пробелов — для нестрогого сравнения названий."""
     return " ".join((text or "").casefold().split())
 
@@ -50,7 +51,7 @@ def _parse_status(value: Any) -> OrderStatus:
     return OrderStatus.PAID
 
 
-def _parse_date(value: Any) -> Optional[datetime]:
+def _parse_date(value: Any) -> datetime | None:
     if isinstance(value, datetime):
         return value
     if isinstance(value, str) and value.strip():
@@ -62,11 +63,11 @@ def _parse_date(value: Any) -> Optional[datetime]:
 
 
 class OrdersService:
-    def __init__(self, ctx: AppContext, notifier: TelegramNotifier):
+    def __init__(self, ctx: AppContext, notifier: TelegramNotifier) -> None:
         self.ctx = ctx
         self.notifier = notifier
         self._busy = threading.Lock()
-        self.last_sync: Optional[str] = None
+        self.last_sync: str | None = None
         self.last_result: dict = {}
 
     # ------------------------------------------------------------ state
@@ -76,8 +77,13 @@ class OrdersService:
 
     def status(self) -> dict:
         s = self.ctx.settings.monitor
-        return {"running": self.running, "last_sync": self.last_sync, "last_result": self.last_result,
-                "interval_minutes": s.orders_check_minutes, "enabled": s.orders_check_minutes > 0}
+        return {
+            "running": self.running,
+            "last_sync": self.last_sync,
+            "last_result": self.last_result,
+            "interval_minutes": s.orders_check_minutes,
+            "enabled": s.orders_check_minutes > 0,
+        }
 
     # ---------------------------------------------------------- convert
     @staticmethod
@@ -106,28 +112,36 @@ class OrdersService:
 
     # ------------------------------------------------------------ match
     @staticmethod
-    def match_lot(order: Order, lots: list[OurLot]) -> Optional[OurLot]:
+    def match_lot(order: Order, lots: list[OurLot]) -> OurLot | None:
         """Найти наш лот по заказу: точное название → нормализованное → уникальная цена среди активных."""
         if not lots:
             return None
 
-        def best(candidates: list[OurLot]) -> Optional[OurLot]:
+        def best(candidates: list[OurLot]) -> OurLot | None:
             if not candidates:
                 return None
             # list_lots уже отсортирован по updated_at DESC — при равном статусе берём самый свежий
-            return min(candidates, key=lambda l: _STATUS_RANK.get(l.status, 9))
+            return min(candidates, key=lambda lot: _STATUS_RANK.get(lot.status, 9))
 
         title = (order.title or "").strip()
         if title:
-            exact = [l for l in lots if (l.title_ru or "").strip() == title]
+            exact = [lot for lot in lots if (lot.title_ru or "").strip() == title]
             if exact:
                 return best(exact)
             norm = _normalize(title)
-            fuzzy = [l for l in lots if _normalize(l.title_ru) == norm or (l.title_en and _normalize(l.title_en) == norm)]
+            fuzzy = [
+                lot
+                for lot in lots
+                if _normalize(lot.title_ru) == norm or (lot.title_en and _normalize(lot.title_en) == norm)
+            ]
             if fuzzy:
                 return best(fuzzy)
         if order.price and order.price > 0:
-            by_price = [l for l in lots if l.status == LotStatus.ACTIVE and abs(float(l.price) - float(order.price)) < 0.01]
+            by_price = [
+                lot
+                for lot in lots
+                if lot.status == LotStatus.ACTIVE and abs(float(lot.price) - float(order.price)) < 0.01
+            ]
             if len(by_price) == 1:
                 return by_price[0]
         return None
@@ -144,9 +158,13 @@ class OrdersService:
             return result
         try:
             try:
-                sales = self.ctx.funpay.get_sales(include_paid=True, include_closed=True, include_refunded=True,
-                                                  max_pages=max_pages) or []
-            except Exception as e:  # noqa: BLE001
+                sales = (
+                    self.ctx.funpay.get_sales(
+                        include_paid=True, include_closed=True, include_refunded=True, max_pages=max_pages
+                    )
+                    or []
+                )
+            except Exception as e:
                 msg = f"не удалось получить список заказов FunPay: {e}"
                 result["errors"].append(msg)
                 self.ctx.log("orders", msg, level="error")
@@ -161,7 +179,7 @@ class OrdersService:
             for raw in sales:
                 try:
                     self._process(raw, lots, known, now, result)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     oid = raw.get("order_id") if isinstance(raw, dict) else raw
                     msg = f"ошибка обработки заказа {oid}: {e}"
                     result["errors"].append(msg)
@@ -185,11 +203,11 @@ class OrdersService:
         storage = self.ctx.storage
         order = self.to_order(raw)
         previous = known.get(order.funpay_order_id)
-        lot: Optional[OurLot] = None
+        lot: OurLot | None = None
         if previous is not None:
             # известный заказ: привязку не пересматриваем, иначе старый заказ «продаст» новый лот с тем же названием
             if previous.lot_id:
-                lot = next((l for l in lots if l.id == previous.lot_id), None)
+                lot = next((x for x in lots if x.id == previous.lot_id), None)
                 order.lot_id = previous.lot_id
                 order.source_url = previous.source_url
                 order.source_price = previous.source_price
@@ -217,17 +235,27 @@ class OrdersService:
             )
         elif previous is not None and previous.status != saved.status:
             result["updated"] += 1
-            self.ctx.log("orders", f"заказ #{order.funpay_order_id}: статус {previous.status.value} → {saved.status.value}",
-                         data={"order_id": order.funpay_order_id})
+            self.ctx.log(
+                "orders",
+                f"заказ #{order.funpay_order_id}: статус {previous.status.value} → {saved.status.value}",
+                data={"order_id": order.funpay_order_id},
+            )
 
         # лот продан: оплаченный/закрытый заказ по активному лоту (FunPay сам снимает лот после продажи)
-        if (is_new and lot is not None and saved.status in (OrderStatus.PAID, OrderStatus.CLOSED)
-                and lot.status == LotStatus.ACTIVE):
+        if (
+            is_new
+            and lot is not None
+            and saved.status in (OrderStatus.PAID, OrderStatus.CLOSED)
+            and lot.status == LotStatus.ACTIVE
+        ):
             lot.status = LotStatus.SOLD
             lot.error = None
             storage.save_lot(lot)
-            self.ctx.log("orders", f"лот #{lot.id} «{lot.title_ru}» продан (заказ #{order.funpay_order_id}) — помечен как sold",
-                         data={"lot_id": lot.id, "order_id": order.funpay_order_id})
+            self.ctx.log(
+                "orders",
+                f"лот #{lot.id} «{lot.title_ru}» продан (заказ #{order.funpay_order_id}) — помечен как sold",
+                data={"lot_id": lot.id, "order_id": order.funpay_order_id},
+            )
 
         # уведомление: новый оплаченный заказ (или повтор, если прошлая попытка не удалась и заказ свежий)
         if saved.status == OrderStatus.PAID and not saved.notified:
@@ -235,18 +263,19 @@ class OrdersService:
             if fresh:
                 self._notify(saved, lot)
 
-    def _notify(self, order: Order, lot: Optional[OurLot]) -> None:
+    def _notify(self, order: Order, lot: OurLot | None) -> None:
         try:
             text = self.notifier.format_order(order, lot)
             sent = self.notifier.send(text, kind="order")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             sent = False
-            self.ctx.log("orders", f"не удалось отправить уведомление о заказе #{order.funpay_order_id}: {e}",
-                         level="warning")
+            self.ctx.log(
+                "orders", f"не удалось отправить уведомление о заказе #{order.funpay_order_id}: {e}", level="warning"
+            )
         # если уведомления выключены — считаем заказ обработанным, чтобы не пытаться бесконечно
         try:
             allowed = self.notifier.allowed("order")
-        except Exception:  # noqa: BLE001
+        except Exception:
             allowed = False
         notified = bool(sent) or not allowed
         if notified != order.notified:
@@ -260,9 +289,9 @@ class OrdersService:
         d["lot"] = lot.model_dump(mode="json") if lot else None
         return d
 
-    def list(self, status: Optional[Any] = None, limit: int = 200) -> list[dict]:
+    def list(self, status: Any | None = None, limit: int = 200) -> list[dict]:
         """Заказы из базы (новые сверху) + наш лот, если сопоставлен."""
-        statuses: Optional[list[str]] = None
+        statuses: list[str] | None = None
         if status:
             if isinstance(status, str):
                 statuses = [s.strip() for s in status.split(",") if s.strip()]
@@ -271,11 +300,11 @@ class OrdersService:
         orders = self.ctx.storage.list_orders(status=statuses or None, limit=limit)
         return [self._order_out(o) for o in orders]
 
-    def get(self, order_id: int) -> Optional[dict]:
+    def get(self, order_id: int) -> dict | None:
         order = self.ctx.storage.get_order(order_id)
         return self._order_out(order) if order else None
 
-    def set_note(self, order_id: int, note: str) -> Optional[dict]:
+    def set_note(self, order_id: int, note: str) -> dict | None:
         """Сохранить заметку к заказу (например, «исходник куплен, данные переданы»)."""
         order = self.ctx.storage.get_order(order_id)
         if order is None:

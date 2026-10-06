@@ -23,13 +23,14 @@
 Все разборы HTML защищены: неожиданная вёрстка приводит к пропуску элемента или к :class:`SourceError`
 с понятным сообщением, но никогда к «голому» AttributeError.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import random
 import string
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
@@ -59,7 +60,7 @@ def chat_url(chat_id: int | str) -> str:
     return f"{BASE_URL}/chat/?node={chat_id}"
 
 
-def _to_int(value: Any) -> Optional[int]:
+def _to_int(value: Any) -> int | None:
     if value is None or isinstance(value, bool):
         return None
     try:
@@ -68,7 +69,7 @@ def _to_int(value: Any) -> Optional[int]:
         return None
 
 
-def _text(el: Optional[Tag]) -> str:
+def _text(el: Tag | None) -> str:
     return el.get_text(" ", strip=True) if el is not None else ""
 
 
@@ -76,7 +77,7 @@ def _soup(html: str) -> BeautifulSoup:
     return BeautifulSoup(html or "", "lxml")
 
 
-def parse_contact_item(a: Tag) -> Optional[dict]:
+def parse_contact_item(a: Tag) -> dict | None:
     """Один ``a.contact-item`` -> словарь чата (None, если нет корректного ``data-id``)."""
     chat_id = _to_int(a.get("data-id"))
     if chat_id is None:
@@ -107,7 +108,7 @@ def parse_contact_items(html: str | Tag | BeautifulSoup) -> list[dict]:
     for a in root.select("a.contact-item"):
         try:
             chat = parse_contact_item(a)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.warning("FunPay чат: не удалось разобрать элемент списка чатов: %s", e)
             continue
         if chat is None or chat["chat_id"] in seen:
@@ -117,7 +118,7 @@ def parse_contact_items(html: str | Tag | BeautifulSoup) -> list[dict]:
     return chats
 
 
-def _interlocutor_id(node: Any, my_id: Optional[int]) -> Optional[int]:
+def _interlocutor_id(node: Any, my_id: int | None) -> int | None:
     """Из ``chat.node.name`` вида ``users-777001-5001`` достать id собеседника (не наш)."""
     name = node.get("name") if isinstance(node, dict) else None
     if not isinstance(name, str) or not name.startswith("users-"):
@@ -130,7 +131,7 @@ def _interlocutor_id(node: Any, my_id: Optional[int]) -> Optional[int]:
     return ids[0] if ids else None
 
 
-def parse_messages(raw_messages: Any, my_id: Optional[int], names: Optional[dict[int, str]] = None) -> list[dict]:
+def parse_messages(raw_messages: Any, my_id: int | None, names: dict[int, str] | None = None) -> list[dict]:
     """Список ``{"id", "author", "html"}`` из JSON истории -> наши словари сообщений.
 
     ``names`` — известные имена авторов по id (наш id, собеседник); дополняется именами из HTML, так как
@@ -167,19 +168,21 @@ def parse_messages(raw_messages: Any, my_id: Optional[int], names: Optional[dict
         else:
             text = _text(soup)
         if text.startswith(BOT_MARK):
-            text = text[len(BOT_MARK):]
+            text = text[len(BOT_MARK) :]
         date_el = soup.select_one(".chat-msg-date")
         ts = (date_el.get("title") or _text(date_el)) if date_el is not None else None
-        out.append({
-            "id": msg_id,
-            "author_id": author_id,
-            "author": names.get(author_id, "") if author_id is not None else "",
-            "text": text.strip(),
-            "is_mine": my_id is not None and author_id == my_id,
-            "system": author_id == 0,
-            "image_url": image_url,
-            "ts": ts or None,
-        })
+        out.append(
+            {
+                "id": msg_id,
+                "author_id": author_id,
+                "author": names.get(author_id, "") if author_id is not None else "",
+                "text": text.strip(),
+                "is_mine": my_id is not None and author_id == my_id,
+                "system": author_id == 0,
+                "image_url": image_url,
+                "ts": ts or None,
+            }
+        )
     out.sort(key=lambda m: m["id"])
     return out
 
@@ -194,10 +197,10 @@ class FunPayChat:
     :param logger: логгер (по умолчанию ``funpay.chat``).
     """
 
-    def __init__(self, source: FunPaySource, logger: Optional[logging.Logger] = None):
+    def __init__(self, source: FunPaySource, logger: logging.Logger | None = None) -> None:
         self.source = source
         self.log = logger or log
-        self.last_sent_message_id: Optional[int] = None
+        self.last_sent_message_id: int | None = None
 
     # ------------------------------------------------------------ infra
     def _ensure(self) -> int:
@@ -249,12 +252,14 @@ class FunPayChat:
         if soup.select_one("div.user-link-name") is None:
             raise AuthError("golden_key невалиден или истёк (страница чатов без авторизации)")
         chats = parse_contact_items(soup)
-        self.log.debug("FunPay чат: получено чатов %d, непрочитанных %d", len(chats),
-                       sum(1 for c in chats if c["unread"]))
+        self.log.debug(
+            "FunPay чат: получено чатов %d, непрочитанных %d", len(chats), sum(1 for c in chats if c["unread"])
+        )
         return chats
 
-    def get_history(self, chat_id: int | str, last_message_id: Optional[int] = None,
-                    interlocutor_name: Optional[str] = None) -> list[dict]:
+    def get_history(
+        self, chat_id: int | str, last_message_id: int | None = None, interlocutor_name: str | None = None
+    ) -> list[dict]:
         """``GET /chat/history`` -> сообщения по возрастанию id.
 
         ``[{id, author_id, author, text, is_mine, system, image_url, ts}]``; ``is_mine`` — автор равен
@@ -272,7 +277,9 @@ class FunPayChat:
         try:
             data = response.json()
         except ValueError:
-            raise SourceError(f"FunPay вернул не JSON для истории чата {chat_id} — возможно, golden_key истёк") from None
+            raise SourceError(
+                f"FunPay вернул не JSON для истории чата {chat_id} — возможно, golden_key истёк"
+            ) from None
         chat = data.get("chat") if isinstance(data, dict) else None
         if not isinstance(chat, dict):
             return []
@@ -292,7 +299,12 @@ class FunPayChat:
         user_id = self._ensure()
         tags = state.setdefault("tags", {}) if isinstance(state, dict) else {}
         objects = [
-            {"type": "orders_counters", "id": user_id, "tag": tags.get("orders_counters") or random_tag(), "data": False},
+            {
+                "type": "orders_counters",
+                "id": user_id,
+                "tag": tags.get("orders_counters") or random_tag(),
+                "data": False,
+            },
             {"type": "chat_bookmarks", "id": user_id, "tag": tags.get("chat_bookmarks") or random_tag(), "data": False},
         ]
         data = self._runner(objects)
@@ -326,8 +338,14 @@ class FunPayChat:
         self._ensure()
         node = _to_int(chat_id) if _to_int(chat_id) is not None else chat_id
         request = {"action": "chat_message", "data": {"node": node, "last_message": -1, "content": text}}
-        objects = [{"type": "chat_node", "id": node, "tag": "00000000",
-                    "data": {"node": node, "last_message": -1, "content": ""}}]
+        objects = [
+            {
+                "type": "chat_node",
+                "id": node,
+                "tag": "00000000",
+                "data": {"node": node, "last_message": -1, "content": ""},
+            }
+        ]
         data = self._runner(objects, request)
         resp = data.get("response")
         if not isinstance(resp, dict):
@@ -344,5 +362,13 @@ class FunPayChat:
         return True
 
 
-__all__ = ["FunPayChat", "parse_contact_items", "parse_contact_item", "parse_messages", "chat_url",
-           "random_tag", "HISTORY_FROM_END", "BOT_MARK"]
+__all__ = [
+    "BOT_MARK",
+    "HISTORY_FROM_END",
+    "FunPayChat",
+    "chat_url",
+    "parse_contact_item",
+    "parse_contact_items",
+    "parse_messages",
+    "random_tag",
+]

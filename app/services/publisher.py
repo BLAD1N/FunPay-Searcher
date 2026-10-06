@@ -1,7 +1,6 @@
 """Публикация наших лотов на FunPay по найденным объявлениям."""
-from __future__ import annotations
 
-from typing import Optional
+from __future__ import annotations
 
 from ..models import Found, FoundStatus, LotStatus, OurLot, Profile, utcnow
 from ..pricing import calculate_price
@@ -12,14 +11,14 @@ EDITABLE = ("price", "title_ru", "title_en", "description_ru", "description_en",
 
 
 class PublisherService:
-    def __init__(self, ctx: AppContext):
+    def __init__(self, ctx: AppContext) -> None:
         self.ctx = ctx
 
     # --------------------------------------------------------- helpers
     def _profile(self, profile_id: str) -> Profile:
         return self.ctx.profiles.get(profile_id)
 
-    def resolve_subcategory(self, found: Found, profile: Profile) -> Optional[int]:
+    def resolve_subcategory(self, found: Found, profile: Profile) -> int | None:
         """Куда публиковать: явный узел из шаблона -> узел исходника (FunPay) -> узел поиска профиля."""
         if profile.lot_template.funpay_subcategory_id:
             return int(profile.lot_template.funpay_subcategory_id)
@@ -29,7 +28,7 @@ class PublisherService:
                 return int(sid)
         try:
             cfg = profile.funpay()
-        except Exception:  # noqa: BLE001
+        except Exception:
             return None
         if cfg.subcategory_id:
             return int(cfg.subcategory_id)
@@ -42,24 +41,31 @@ class PublisherService:
         return None
 
     # --------------------------------------------------------- preview
-    def preview(self, found: Found, overrides: Optional[dict] = None) -> OurLot:
+    def preview(self, found: Found, overrides: dict | None = None) -> OurLot:
         profile = self._profile(found.profile_id)
         price = found.suggested_price or calculate_price(found.listing.price, profile.pricing)
         rendered = render_lot(found.listing, found.match, profile, price)
         lot = OurLot(
-            found_id=found.id or 0, profile_id=profile.id,
+            found_id=found.id or 0,
+            profile_id=profile.id,
             subcategory_id=self.resolve_subcategory(found, profile),
-            title_ru=rendered.get("title_ru", ""), title_en=rendered.get("title_en", ""),
-            description_ru=rendered.get("description_ru", ""), description_en=rendered.get("description_en", ""),
-            price=float(rendered.get("price", price)), source_price=found.listing.price,
-            source_url=found.listing.url, seller_url=found.listing.seller_url,
-            fields=dict(rendered.get("fields") or {}), status=LotStatus.DRAFT,
-            source_available=found.available, source_checked_at=found.last_checked,
+            title_ru=rendered.get("title_ru", ""),
+            title_en=rendered.get("title_en", ""),
+            description_ru=rendered.get("description_ru", ""),
+            description_en=rendered.get("description_en", ""),
+            price=float(rendered.get("price", price)),
+            source_price=found.listing.price,
+            source_url=found.listing.url,
+            seller_url=found.listing.seller_url,
+            fields=dict(rendered.get("fields") or {}),
+            status=LotStatus.DRAFT,
+            source_available=found.available,
+            source_checked_at=found.last_checked,
         )
         self._apply_overrides(lot, overrides)
         return lot
 
-    def _apply_overrides(self, lot: OurLot, overrides: Optional[dict]) -> None:
+    def _apply_overrides(self, lot: OurLot, overrides: dict | None) -> None:
         if not overrides:
             return
         for key in EDITABLE:
@@ -72,11 +78,11 @@ class PublisherService:
                 if key == "fields" and not isinstance(value, dict):
                     raise ValueError("fields должен быть объектом")
                 setattr(lot, key, value)
-        if "subcategory_id" in overrides and overrides["subcategory_id"]:
+        if overrides.get("subcategory_id"):
             lot.subcategory_id = int(overrides["subcategory_id"])
 
     # ---------------------------------------------------------- create
-    def create(self, found: Found, overrides: Optional[dict] = None, publish: bool = False) -> OurLot:
+    def create(self, found: Found, overrides: dict | None = None, publish: bool = False) -> OurLot:
         existing = self.ctx.storage.get_lot_by_found(found.id)
         if existing and existing.status in (LotStatus.ACTIVE, LotStatus.DRAFT, LotStatus.DEACTIVATED):
             lot = existing
@@ -84,8 +90,9 @@ class PublisherService:
         else:
             lot = self.preview(found, overrides)
         lot = self.ctx.storage.save_lot(lot)
-        self.ctx.log("lots", f"черновик лота #{lot.id} создан: {lot.title_ru} — {lot.price:.0f}",
-                     data={"found_id": found.id})
+        self.ctx.log(
+            "lots", f"черновик лота #{lot.id} создан: {lot.title_ru} — {lot.price:.0f}", data={"found_id": found.id}
+        )
         if publish:
             lot = self.publish(lot)
         return lot
@@ -110,35 +117,55 @@ class PublisherService:
         if lot.status == LotStatus.ACTIVE and not lot.funpay_lot_id:
             raise RuntimeError("лот уже опубликован, но его id неизвестен — повторная публикация создаст дубль")
         if not lot.subcategory_id:
-            raise RuntimeError("не определена категория FunPay для публикации (укажите funpay_subcategory_id в шаблоне лота)")
+            raise RuntimeError(
+                "не определена категория FunPay для публикации (укажите funpay_subcategory_id в шаблоне лота)"
+            )
         profile = self._profile(lot.profile_id)
         tpl = profile.lot_template
         try:
             if lot.funpay_lot_id:
                 self.ctx.funpay.update_lot(
-                    lot.funpay_lot_id, lot.subcategory_id,
-                    title_ru=lot.title_ru, title_en=lot.title_en, description_ru=lot.description_ru,
-                    description_en=lot.description_en, price=lot.price, active=True, extra_fields=lot.fields)
+                    lot.funpay_lot_id,
+                    lot.subcategory_id,
+                    title_ru=lot.title_ru,
+                    title_en=lot.title_en,
+                    description_ru=lot.description_ru,
+                    description_en=lot.description_en,
+                    price=lot.price,
+                    active=True,
+                    extra_fields=lot.fields,
+                )
             else:
                 result = self.ctx.funpay.create_lot(
-                    lot.subcategory_id, title_ru=lot.title_ru, title_en=lot.title_en,
-                    description_ru=lot.description_ru, description_en=lot.description_en, price=lot.price,
-                    amount=tpl.amount, active=tpl.active, deactivate_after_sale=tpl.deactivate_after_sale,
-                    extra_fields=lot.fields)
+                    lot.subcategory_id,
+                    title_ru=lot.title_ru,
+                    title_en=lot.title_en,
+                    description_ru=lot.description_ru,
+                    description_en=lot.description_en,
+                    price=lot.price,
+                    amount=tpl.amount,
+                    active=tpl.active,
+                    deactivate_after_sale=tpl.deactivate_after_sale,
+                    extra_fields=lot.fields,
+                )
                 lot.funpay_lot_id = result.get("lot_id")
                 lot.funpay_url = result.get("url") or (
-                    f"https://funpay.com/lots/offer?id={lot.funpay_lot_id}" if lot.funpay_lot_id
-                    else f"https://funpay.com/lots/{lot.subcategory_id}/trade")
+                    f"https://funpay.com/lots/offer?id={lot.funpay_lot_id}"
+                    if lot.funpay_lot_id
+                    else f"https://funpay.com/lots/{lot.subcategory_id}/trade"
+                )
             lot.status = LotStatus.ACTIVE
             lot.error = None
             if not lot.funpay_lot_id:
                 # лот создан, но его id не найден в списке наших лотов — предупреждаем, повторная публикация запрещена
-                lot.error = ("лот создан на FunPay, но его id не удалось определить автоматически; "
-                             "проверьте список лотов на FunPay. Повторно не публикуйте — будет дубль.")
+                lot.error = (
+                    "лот создан на FunPay, но его id не удалось определить автоматически; "
+                    "проверьте список лотов на FunPay. Повторно не публикуйте — будет дубль."
+                )
                 self.ctx.log("lots", f"лот #{lot.id}: {lot.error}", level="warning")
             self.ctx.storage.set_found_status(lot.found_id, FoundStatus.PUBLISHED)
             self.ctx.log("lots", f"лот #{lot.id} опубликован на FunPay (id {lot.funpay_lot_id}) за {lot.price:.0f}")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             lot.status = LotStatus.ERROR
             lot.error = str(e)
             self.ctx.log("lots", f"ошибка публикации лота #{lot.id}: {e}", level="error")
@@ -155,12 +182,19 @@ class PublisherService:
         if lot.status == LotStatus.ACTIVE and lot.funpay_lot_id:
             try:
                 self.ctx.funpay.update_lot(
-                    lot.funpay_lot_id, lot.subcategory_id, title_ru=lot.title_ru, title_en=lot.title_en,
-                    description_ru=lot.description_ru, description_en=lot.description_en, price=lot.price,
-                    active=True, extra_fields=lot.fields)
+                    lot.funpay_lot_id,
+                    lot.subcategory_id,
+                    title_ru=lot.title_ru,
+                    title_en=lot.title_en,
+                    description_ru=lot.description_ru,
+                    description_en=lot.description_en,
+                    price=lot.price,
+                    active=True,
+                    extra_fields=lot.fields,
+                )
                 lot.error = None
                 self.ctx.log("lots", f"лот #{lot.id} обновлён на FunPay")
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 lot.error = str(e)
                 self.ctx.log("lots", f"ошибка обновления лота #{lot.id}: {e}", level="error")
         return self.ctx.storage.save_lot(lot)
@@ -172,27 +206,36 @@ class PublisherService:
                 if active:
                     # при активации отправляем все поля: правки, сделанные в снятом лоте, должны попасть на FunPay
                     self.ctx.funpay.update_lot(
-                        lot_id, lot.subcategory_id, title_ru=lot.title_ru, title_en=lot.title_en,
-                        description_ru=lot.description_ru, description_en=lot.description_en, price=lot.price,
-                        active=True, extra_fields=lot.fields)
+                        lot_id,
+                        lot.subcategory_id,
+                        title_ru=lot.title_ru,
+                        title_en=lot.title_en,
+                        description_ru=lot.description_ru,
+                        description_en=lot.description_en,
+                        price=lot.price,
+                        active=True,
+                        extra_fields=lot.fields,
+                    )
                 else:
                     self.ctx.funpay.set_lot_active(lot_id, lot.subcategory_id, False)
                 lot.error = None
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 lot.error = str(e)
-                self.ctx.log("lots", f"не удалось {'активировать' if active else 'снять'} лот #{lot.id}: {e}",
-                             level="error")
+                self.ctx.log(
+                    "lots", f"не удалось {'активировать' if active else 'снять'} лот #{lot.id}: {e}", level="error"
+                )
                 return self.ctx.storage.save_lot(lot)
         lot.status = LotStatus.ACTIVE if active else LotStatus.DEACTIVATED
-        self.ctx.log("lots", f"лот #{lot.id} {'активирован' if active else 'снят с продажи'}"
-                             + (f": {reason}" if reason else ""))
+        self.ctx.log(
+            "lots", f"лот #{lot.id} {'активирован' if active else 'снят с продажи'}" + (f": {reason}" if reason else "")
+        )
         return self.ctx.storage.save_lot(lot)
 
     def delete(self, lot: OurLot, delete_on_funpay: bool = True) -> None:
         if delete_on_funpay and lot.funpay_lot_id and lot.subcategory_id and lot.status == LotStatus.ACTIVE:
             try:
                 self.ctx.funpay.set_lot_active(lot.funpay_lot_id, lot.subcategory_id, False)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 self.ctx.log("lots", f"не удалось снять лот #{lot.id} перед удалением: {e}", level="warning")
         self.ctx.storage.delete_lot(lot.id)
         self.ctx.log("lots", f"лот #{lot.id} удалён из базы")
@@ -200,11 +243,11 @@ class PublisherService:
     # ----------------------------------------------- source availability
     def check_source(self, lot: OurLot) -> OurLot:
         found = self.ctx.storage.get_found(lot.found_id)
-        available: Optional[bool] = None
+        available: bool | None = None
         if found:
             try:
                 available = self.ctx.source(found.listing.source).is_available(found.listing.source_id)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 self.ctx.log("monitor", f"проверка исходника лота #{lot.id}: {e}", level="warning")
             self.ctx.storage.set_found_availability(found.id, available)
         lot.source_available = available
@@ -218,6 +261,6 @@ class PublisherService:
             self.ctx.log("monitor", f"исходник лота #{lot.id} недоступен: {lot.source_url}", level="warning")
             try:
                 self.ctx.notify(self.ctx.notifier.format_source_sold(lot), kind="sold")
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 self.ctx.log("monitor", f"уведомление о продаже исходника: {e}", level="warning")
         return lot

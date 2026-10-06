@@ -1,12 +1,23 @@
 """Тесты генерации текста лота (app/templating.py)."""
+
 from __future__ import annotations
 
 import pytest
 
 from app.models import Listing, LotTemplate, MatchResult, Profile
 from app.templating import (
-    DEFAULT_DESCRIPTION_RU, DEFAULT_TITLE_RU, TITLE_MAX, SafeDict, build_context, clean_separators,
-    clean_title, format_price, game_name, render_lot, render_template, trim_title,
+    DEFAULT_DESCRIPTION_RU,
+    DEFAULT_TITLE_RU,
+    TITLE_MAX,
+    SafeDict,
+    build_context,
+    clean_separators,
+    clean_title,
+    format_price,
+    game_name,
+    render_lot,
+    render_template,
+    trim_title,
 )
 
 SELLER = "SuperSellerXYZ"
@@ -14,17 +25,24 @@ URL = "https://funpay.com/lots/offer?id=123456"
 
 
 def make_listing(**kw) -> Listing:
-    base = dict(source="funpay", source_id="123456", url=URL, title="Продам акк WoT Chieftain",
-                description="Описание исходника", price=15000, seller_name=SELLER,
-                seller_url="https://funpay.com/users/777/", region="RU",
-                attributes={"Steam_Level": 42, "tanks": "1 234 танка", "premium": True})
+    base = dict(
+        source="funpay",
+        source_id="123456",
+        url=URL,
+        title="Продам акк WoT Chieftain",
+        description="Описание исходника",
+        price=15000,
+        seller_name=SELLER,
+        seller_url="https://funpay.com/users/777/",
+        region="RU",
+        attributes={"Steam_Level": 42, "tanks": "1 234 танка", "premium": True},
+    )
     base.update(kw)
     return Listing(**base)
 
 
 def make_profile(**tpl) -> Profile:
-    return Profile(id="wot_ru_tops", name="WoT RU топы", game="wot", region="RU",
-                   lot_template=LotTemplate(**tpl))
+    return Profile(id="wot_ru_tops", name="WoT RU топы", game="wot", region="RU", lot_template=LotTemplate(**tpl))
 
 
 MATCH = MatchResult(matched=True, score=3.5, highlights=["Chieftain", "Об. 279 (р)", "ИС-7"])
@@ -32,13 +50,30 @@ MATCH = MatchResult(matched=True, score=3.5, highlights=["Chieftain", "Об. 279
 
 # ----------------------------------------------------------------- плейсхолдеры --
 
+
 def test_all_placeholders_render():
-    tpl = ("{game}|{game_short}|{region}|{highlights}|{price}|{price_raw}|{source_price}|"
-           "{source_title}|{source_description}|{seller}|{source}|{profile_name}|{currency}|{attr[steam_level]}")
+    tpl = (
+        "{game}|{game_short}|{region}|{highlights}|{price}|{price_raw}|{source_price}|"
+        "{source_title}|{source_description}|{seller}|{source}|{profile_name}|{currency}|{attr[steam_level]}"
+    )
     out = render_lot(make_listing(), MATCH, make_profile(description_ru=tpl), 29000)
     parts = out["description_ru"].split("|")
-    assert parts == ["World of Tanks", "WoT", "RU", "Chieftain • Об. 279 (р) • ИС-7", "29 000", "29000", "15 000",
-                     "Продам акк WoT Chieftain", "Описание исходника", SELLER, "FunPay", "WoT RU топы", "RUB", "42"]
+    assert parts == [
+        "World of Tanks",
+        "WoT",
+        "RU",
+        "Chieftain • Об. 279 (р) • ИС-7",
+        "29 000",
+        "29000",
+        "15 000",
+        "Продам акк WoT Chieftain",
+        "Описание исходника",
+        SELLER,
+        "FunPay",
+        "WoT RU топы",
+        "RUB",
+        "42",
+    ]
 
 
 def test_highlights_lines_placeholder():
@@ -59,8 +94,10 @@ def test_malformed_template_does_not_raise():
 
 def test_attr_access_missing_and_case_insensitive():
     ctx = build_context(make_listing(), MATCH, make_profile(), 29000)
-    assert render_template("[{attr[Steam_Level]}][{attr[steam_level]}][{attr[missing]}][{attr[premium]}]", ctx) \
+    assert (
+        render_template("[{attr[Steam_Level]}][{attr[steam_level]}][{attr[missing]}][{attr[premium]}]", ctx)
         == "[42][42][][да]"
+    )
     assert render_template("{attr.tanks}", ctx) == "1 234 танка"
 
 
@@ -94,6 +131,7 @@ def test_source_names():
 
 
 # ----------------------------------------------------------------- заголовок --
+
 
 def test_title_default_template():
     out = render_lot(make_listing(), MATCH, make_profile(title_ru=""), 29000)
@@ -137,7 +175,7 @@ def test_title_overflow_drops_highlights_first():
     out = render_lot(make_listing(), many, make_profile(title_ru=""), 29000)
     assert len(out["title_ru"]) <= TITLE_MAX
     assert out["title_ru"].startswith("World of Tanks | Highlight00")
-    assert out["title_ru"].endswith("| RU")   # хвост с регионом сохранён, а не отрезан
+    assert out["title_ru"].endswith("| RU")  # хвост с регионом сохранён, а не отрезан
     assert "…" not in out["title_ru"]
 
 
@@ -147,6 +185,7 @@ def test_title_overflow_without_highlights_is_cut():
 
 
 # ----------------------------------------------------------------- описание --
+
 
 def test_default_description_structure():
     out = render_lot(make_listing(), MATCH, make_profile(description_ru=""), 29000)
@@ -169,7 +208,7 @@ def test_default_description_does_not_leak_seller_or_url():
         assert SELLER not in text
         assert URL not in text
         assert "funpay.com/users" not in text
-        assert "Продам акк WoT" not in text   # исходный заголовок тоже не показываем
+        assert "Продам акк WoT" not in text  # исходный заголовок тоже не показываем
 
 
 def test_default_description_with_no_highlights_has_fallback_line():
@@ -180,8 +219,12 @@ def test_default_description_with_no_highlights_has_fallback_line():
 
 def test_description_empty_bullet_lines_removed_and_newlines_collapsed():
     tpl = "Заголовок:\n\n\n\n• Регион: {region}\n• Уровень: {attr[nope]}\n• Цена: {price}"
-    out = render_lot(make_listing(region=None), MATCH,
-                     Profile(id="p", name="p", game="cs2", lot_template=LotTemplate(description_ru=tpl)), 5000)
+    out = render_lot(
+        make_listing(region=None),
+        MATCH,
+        Profile(id="p", name="p", game="cs2", lot_template=LotTemplate(description_ru=tpl)),
+        5000,
+    )
     assert out["description_ru"] == "Заголовок:\n\n• Цена: 5 000"
 
 
@@ -192,8 +235,11 @@ def test_description_en_custom():
 
 # ----------------------------------------------------------------- поля и цена --
 
+
 def test_fields_rendered_with_placeholders():
-    prof = make_profile(fields={"server": "{region}", "note": "{game_short} | {attr[steam_level]} | {missing}", "x": ""})
+    prof = make_profile(
+        fields={"server": "{region}", "note": "{game_short} | {attr[steam_level]} | {missing}", "x": ""}
+    )
     out = render_lot(make_listing(), MATCH, prof, 29000)
     assert out["fields"] == {"server": "RU", "note": "WoT | 42 | {missing}", "x": ""}
     assert out["price"] == 29000.0
@@ -204,8 +250,15 @@ def test_safe_dict_missing():
     assert "{a} b".format_map(SafeDict(b="B")) == "{a} b"
 
 
-@pytest.mark.parametrize("game, expected", [("wot_blitz", "WoT Blitz"), ("genshin", "Genshin Impact"),
-                                            ("lol", "League of Legends"), ("standoff2", "Standoff 2")])
+@pytest.mark.parametrize(
+    "game, expected",
+    [
+        ("wot_blitz", "WoT Blitz"),
+        ("genshin", "Genshin Impact"),
+        ("lol", "League of Legends"),
+        ("standoff2", "Standoff 2"),
+    ],
+)
 def test_game_map(game, expected):
     prof = Profile(id="p", name="p", game=game, lot_template=LotTemplate(title_ru="{game}"))
     assert render_lot(make_listing(), MATCH, prof, 1)["title_ru"] == expected

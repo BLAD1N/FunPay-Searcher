@@ -1,4 +1,5 @@
 """Тесты автоподнятия лотов: фейковый FunPay (categories + raise_lots), реальное хранилище (без сети)."""
+
 from __future__ import annotations
 
 import tempfile
@@ -15,8 +16,14 @@ from app.settings import Settings
 from app.storage import Storage
 
 CATEGORIES = [
-    {"id": 1, "name": "World of Tanks", "subcategories": [{"id": 148, "name": "Аккаунты", "type": "common"},
-                                                          {"id": 149, "name": "Голда", "type": "currency"}]},
+    {
+        "id": 1,
+        "name": "World of Tanks",
+        "subcategories": [
+            {"id": 148, "name": "Аккаунты", "type": "common"},
+            {"id": 149, "name": "Голда", "type": "currency"},
+        ],
+    },
     {"id": 2, "name": "Dota 2", "subcategories": [{"id": 200, "name": "Аккаунты", "type": "common"}]},
     {"id": 3, "name": "CS2", "subcategories": [{"id": 300, "name": "Аккаунты", "type": "common"}]},
 ]
@@ -55,11 +62,26 @@ def _make_ctx(monkeypatch, golden_key: str = "test-key") -> AppContext:
 
 
 def _add_lot(ctx: AppContext, subcategory_id: int | None, status: LotStatus = LotStatus.ACTIVE, i: str = "1") -> OurLot:
-    found, _ = ctx.storage.upsert_found(Found(
-        profile_id="p", listing=Listing(source="funpay", source_id=i, url=f"https://funpay.com/lots/offer?id={i}", price=1),
-        match=MatchResult(matched=True)))
-    return ctx.storage.save_lot(OurLot(found_id=found.id, profile_id="p", subcategory_id=subcategory_id, title_ru=f"lot {i}",
-                                       price=10, source_price=5, source_url="u", status=status, funpay_lot_id=int(i)))
+    found, _ = ctx.storage.upsert_found(
+        Found(
+            profile_id="p",
+            listing=Listing(source="funpay", source_id=i, url=f"https://funpay.com/lots/offer?id={i}", price=1),
+            match=MatchResult(matched=True),
+        )
+    )
+    return ctx.storage.save_lot(
+        OurLot(
+            found_id=found.id,
+            profile_id="p",
+            subcategory_id=subcategory_id,
+            title_ru=f"lot {i}",
+            price=10,
+            source_price=5,
+            source_url="u",
+            status=status,
+            funpay_lot_id=int(i),
+        )
+    )
 
 
 @pytest.fixture()
@@ -67,14 +89,16 @@ def env(monkeypatch):
     ctx = _make_ctx(monkeypatch)
     _add_lot(ctx, 148, i="1")
     _add_lot(ctx, 149, i="2")
-    _add_lot(ctx, 148, i="3")                          # вторая подкатегория-дубль — id не должен повторяться
+    _add_lot(ctx, 148, i="3")  # вторая подкатегория-дубль — id не должен повторяться
     _add_lot(ctx, 200, i="4")
     _add_lot(ctx, 300, status=LotStatus.DRAFT, i="5")  # черновик — не поднимаем
-    _add_lot(ctx, 300, status=LotStatus.SOLD, i="6")   # продан — не поднимаем
-    funpay = FakeFunPay({
-        1: [{"ok": True, "message": "Предложения подняты", "wait_seconds": None}],
-        2: [{"ok": False, "message": "Подождите 1 час", "wait_seconds": 3600}],
-    })
+    _add_lot(ctx, 300, status=LotStatus.SOLD, i="6")  # продан — не поднимаем
+    funpay = FakeFunPay(
+        {
+            1: [{"ok": True, "message": "Предложения подняты", "wait_seconds": None}],
+            2: [{"ok": False, "message": "Подождите 1 час", "wait_seconds": 3600}],
+        }
+    )
     ctx._funpay = funpay
     return ctx, funpay, RaiserService(ctx)
 
@@ -129,7 +153,9 @@ def test_errors_do_not_raise(monkeypatch):
     _add_lot(ctx, 148, i="1")
     _add_lot(ctx, 200, i="2")
     _add_lot(ctx, 999, i="3")  # неизвестная подкатегория
-    funpay = FakeFunPay({1: [RuntimeError("сеть упала")], 2: [{"ok": False, "message": "Ошибка", "wait_seconds": None}]})
+    funpay = FakeFunPay(
+        {1: [RuntimeError("сеть упала")], 2: [{"ok": False, "message": "Ошибка", "wait_seconds": None}]}
+    )
     ctx._funpay = funpay
     svc = RaiserService(ctx)
     res = svc.run()
@@ -152,5 +178,12 @@ def test_status_before_first_run(monkeypatch):
     ctx.settings.monitor.auto_raise_hours = 0
     svc = RaiserService(ctx)
     st = svc.status()
-    assert st == {"running": False, "enabled": False, "interval_hours": 0.0, "last_run": None, "last_result": {},
-                  "last_raised": {}, "waiting": []}
+    assert st == {
+        "running": False,
+        "enabled": False,
+        "interval_hours": 0.0,
+        "last_run": None,
+        "last_result": {},
+        "last_raised": {},
+        "waiting": [],
+    }

@@ -54,6 +54,7 @@
 Имена полей КОНКРЕТНОГО объявления (для criteria.numeric в профиле) смотрите в
 Listing.attributes["raw_keys"] — это список всех ключей, которые вернул API.
 """
+
 from __future__ import annotations
 
 import json
@@ -61,7 +62,8 @@ import logging
 import re
 import threading
 import time
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 import httpx
 
@@ -138,7 +140,7 @@ class NotFoundError(SourceError):
     """Объявление не найдено (HTTP 404 или ошибка «item not found»)."""
 
 
-def encode_params(params: Optional[dict[str, Any]]) -> list[tuple[str, str]]:
+def encode_params(params: dict[str, Any] | None) -> list[tuple[str, str]]:
     """Преобразовать словарь параметров в список пар для query-string.
 
     - списки/кортежи/множества -> повторяющиеся `key[]=v` (если ключ уже
@@ -211,9 +213,9 @@ class LolzSource(BaseSource):
     def __init__(
         self,
         settings: LolzSettings,
-        logger: Optional[logging.Logger] = None,
-        base_url: Optional[str] = None,
-        transport: Optional[httpx.BaseTransport] = None,
+        logger: logging.Logger | None = None,
+        base_url: str | None = None,
+        transport: httpx.BaseTransport | None = None,
     ) -> None:
         self.settings = settings
         self.log = logger or logging.getLogger("lolz")
@@ -224,9 +226,9 @@ class LolzSource(BaseSource):
             self._hosts = [DEFAULT_BASE_URL, FALLBACK_BASE_URL]
         self._host_confirmed = False
         self._transport = transport
-        self._client: Optional[httpx.Client] = None
+        self._client: httpx.Client | None = None
         self._lock = threading.Lock()
-        self._last_request_ts: Optional[float] = None
+        self._last_request_ts: float | None = None
         # Подменяемые в тестах функции времени.
         self._sleep: Callable[[float], None] = time.sleep
         self._monotonic: Callable[[], float] = time.monotonic
@@ -244,7 +246,7 @@ class LolzSource(BaseSource):
             finally:
                 self._client = None
 
-    def __enter__(self) -> "LolzSource":
+    def __enter__(self) -> LolzSource:
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -289,7 +291,7 @@ class LolzSource(BaseSource):
     def _send_once(self, method: str, path: str, query: list[tuple[str, str]]) -> httpx.Response:
         """Один физический запрос с автоматическим переключением хоста."""
         client = self._get_client()
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         for index, host in enumerate(list(self._hosts)):
             has_more = index < len(self._hosts) - 1
             url = host + path
@@ -316,7 +318,7 @@ class LolzSource(BaseSource):
             return response
         raise SourceError(f"ошибка сети при запросе к Lolzteam: {last_error}")
 
-    def _request(self, method: str, path: str, params: Optional[dict[str, Any]] = None) -> Any:
+    def _request(self, method: str, path: str, params: dict[str, Any] | None = None) -> Any:
         """Выполнить запрос к API и вернуть разобранный JSON.
 
         401/403 -> AuthError, 404 -> NotFoundError, другие ошибки -> SourceError.
@@ -337,7 +339,9 @@ class LolzSource(BaseSource):
                 wait = self._retry_after(response)
                 self.log.warning(
                     "Lolzteam: лимит запросов (429), ждём %.0f с и повторяем (%d/%d)",
-                    wait, attempts, MAX_429_RETRIES,
+                    wait,
+                    attempts,
+                    MAX_429_RETRIES,
                 )
                 self._sleep(wait)
         return self._parse_response(response, path)
@@ -433,10 +437,7 @@ class LolzSource(BaseSource):
                 entries = {k: v for k, v in data.items() if k != "system_info"}
         if entries is None:
             return []
-        if isinstance(entries, dict):
-            pairs = list(entries.items())
-        else:
-            pairs = [(None, e) for e in entries]
+        pairs = list(entries.items()) if isinstance(entries, dict) else [(None, e) for e in entries]
         out: list[dict[str, str]] = []
         seen: set[str] = set()
         for key, entry in pairs:
@@ -480,7 +481,7 @@ class LolzSource(BaseSource):
     def search_category(
         self,
         category: str,
-        params: Optional[dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
         pages: int = 1,
         max_items: int = 500,
     ) -> list[Listing]:
@@ -512,7 +513,10 @@ class LolzSource(BaseSource):
             total = _to_int(data.get("totalItems") if isinstance(data, dict) else None)
             self.log.info(
                 "Lolzteam: %s страница %d — %d объявлений (всего %s)",
-                cat, page, len(items), total if total is not None else "?",
+                cat,
+                page,
+                len(items),
+                total if total is not None else "?",
             )
             for item in items:
                 listing = self._map_item(item)
@@ -530,7 +534,7 @@ class LolzSource(BaseSource):
                 break
         return out
 
-    def search(self, profile: Profile, limit: Optional[int] = None) -> list[Listing]:
+    def search(self, profile: Profile, limit: int | None = None) -> list[Listing]:
         cfg = profile.lolz()
         if not cfg.enabled:
             self.log.info("Lolzteam: источник выключен в профиле «%s»", profile.name)
@@ -547,7 +551,9 @@ class LolzSource(BaseSource):
         max_items = int(limit) if limit else int(cfg.max_items)
         self.log.info(
             "Lolzteam: поиск по профилю «%s» в категории %s, params=%s",
-            profile.name, cfg.category, params,
+            profile.name,
+            cfg.category,
+            params,
         )
         listings = self.search_category(cfg.category, params, pages=cfg.pages, max_items=max_items)
         for listing in listings:
@@ -556,7 +562,7 @@ class LolzSource(BaseSource):
         self.log.info("Lolzteam: профиль «%s» — найдено %d объявлений", profile.name, len(listings))
         return listings
 
-    def get_listing(self, source_id: str) -> Optional[Listing]:
+    def get_listing(self, source_id: str) -> Listing | None:
         item_id = self._item_id(source_id)
         try:
             data = self._request("GET", f"/{item_id}")
@@ -576,7 +582,7 @@ class LolzSource(BaseSource):
             raise SourceError(f"неожиданный формат объявления Lolzteam /{item_id}")
         return listing
 
-    def is_available(self, source_id: str) -> Optional[bool]:
+    def is_available(self, source_id: str) -> bool | None:
         try:
             listing = self.get_listing(source_id)
         except SourceError as e:
@@ -594,12 +600,12 @@ class LolzSource(BaseSource):
     def _item_id(source_id: Any) -> str:
         sid = str(source_id).strip()
         if sid.startswith("lolz:"):
-            sid = sid[len("lolz:"):]
+            sid = sid[len("lolz:") :]
         if not sid.isdigit():
             raise SourceError(f"некорректный id объявления Lolzteam: {source_id!r}")
         return sid
 
-    def _map_item(self, item: Any) -> Optional[Listing]:
+    def _map_item(self, item: Any) -> Listing | None:
         """Преобразовать объявление из ответа API в Listing."""
         if not isinstance(item, dict):
             return None
@@ -625,7 +631,7 @@ class LolzSource(BaseSource):
                 seller_id = str(uid)
                 seller_url = MEMBER_URL.format(user_id=seller_id)
 
-        region: Optional[str] = None
+        region: str | None = None
         for key in REGION_KEYS:
             value = item.get(key)
             if value is None or value == "" or isinstance(value, bool):
@@ -641,16 +647,16 @@ class LolzSource(BaseSource):
         for key, value in item.items():
             if key in ("title", "description", "seller"):
                 continue
-            if isinstance(value, bool) or isinstance(value, (str, int, float)):
-                attributes[key] = value
-            elif isinstance(value, (list, dict)) and _is_small_collection(value):
+            if isinstance(value, (bool, str, int, float)) or (
+                isinstance(value, (list, dict)) and _is_small_collection(value)
+            ):
                 attributes[key] = value
         for key in ALWAYS_ATTRIBUTES:
             attributes.setdefault(key, item.get(key))
         if isinstance(seller, dict):
             # полезно для фильтров по продавцу (sold_items_count, restore_percents ...)
             attributes["seller"] = {k: v for k, v in seller.items() if isinstance(v, (str, int, float, bool))}
-        attributes["raw_keys"] = sorted(str(k) for k in item.keys())
+        attributes["raw_keys"] = sorted(str(k) for k in item)
 
         return Listing(
             source="lolz",
@@ -673,7 +679,7 @@ class LolzSource(BaseSource):
     _encode_params = staticmethod(encode_params)
 
 
-def _to_int(value: Any) -> Optional[int]:
+def _to_int(value: Any) -> int | None:
     if value is None or isinstance(value, bool):
         return None
     try:

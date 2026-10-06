@@ -17,15 +17,16 @@
 Сервис никогда не выбрасывает исключений из потока: ошибки попадают в результат запуска и в журнал
 (``kind="chat"``, уровень ``error``).
 """
+
 from __future__ import annotations
 
 import html
 import json
 import os
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from ..matching import match_text
 from ..models import utcnow
@@ -34,14 +35,14 @@ from ..sources.funpay_chat import FunPayChat, chat_url
 from .context import AppContext
 
 STATE_FILE_NAME = "autoreply_state.json"
-MIN_POLL_SECONDS = 5          # защита от слишком частого опроса FunPay
-INITIAL_DELAY_SECONDS = 10    # первый опрос после старта приложения
-STATE_TTL_DAYS = 30           # записи о чатах старше этого срока удаляются из файла состояния
+MIN_POLL_SECONDS = 5  # защита от слишком частого опроса FunPay
+INITIAL_DELAY_SECONDS = 10  # первый опрос после старта приложения
+STATE_TTL_DAYS = 30  # записи о чатах старше этого срока удаляются из файла состояния
 LOG_PREVIEW_LEN = 60
 NOTIFY_PREVIEW_LEN = 300
 
 
-def pick_reply(text: str, keywords: dict[str, str], greeting: str) -> tuple[str, Optional[str]]:
+def pick_reply(text: str, keywords: dict[str, str], greeting: str) -> tuple[str, str | None]:
     """Подобрать ответ на текст покупателя: ``(ответ, сработавшее правило | None)``.
 
     Правила проверяются в порядке записи; ключ — варианты через ``|`` (см. :func:`app.matching.match_text`).
@@ -56,19 +57,19 @@ def pick_reply(text: str, keywords: dict[str, str], greeting: str) -> tuple[str,
         try:
             if match_text(text, str(key)):
                 return str(reply).strip(), str(key)
-        except Exception:  # noqa: BLE001 — кривое правило не должно ломать автоответчик
+        except Exception:
             continue
     return str(greeting or "").strip(), None
 
 
-def _parse_iso(value: Any) -> Optional[datetime]:
+def _parse_iso(value: Any) -> datetime | None:
     if not isinstance(value, str) or not value.strip():
         return None
     try:
         dt = datetime.fromisoformat(value.strip())
     except ValueError:
         return None
-    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
 def _preview(text: str, limit: int) -> str:
@@ -79,20 +80,20 @@ def _preview(text: str, limit: int) -> str:
 class AutoReplyService:
     """Фоновый автоответчик чата FunPay. Создание объекта побочных эффектов не имеет."""
 
-    def __init__(self, ctx: AppContext):
+    def __init__(self, ctx: AppContext) -> None:
         self.ctx = ctx
         self._busy = threading.Lock()
         self._stop = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._state_lock = threading.RLock()
-        self._state: Optional[dict] = None            # содержимое autoreply_state.json (лениво)
-        self._runner_state: Optional[dict] = None     # теги /runner/ между опросами; None — опроса ещё не было
-        self._sent_ids: dict[int, Optional[int]] = {} # chat_id -> id нашего последнего ответа (если FunPay вернул)
+        self._state: dict | None = None  # содержимое autoreply_state.json (лениво)
+        self._runner_state: dict | None = None  # теги /runner/ между опросами; None — опроса ещё не было
+        self._sent_ids: dict[int, int | None] = {}  # chat_id -> id нашего последнего ответа (если FunPay вернул)
         self.initial_delay = INITIAL_DELAY_SECONDS
-        self.last_run: Optional[str] = None
-        self.next_run: Optional[str] = None
+        self.last_run: str | None = None
+        self.next_run: str | None = None
         self.last_result: dict = {}
-        self.last_error: Optional[str] = None
+        self.last_error: str | None = None
         self.replied_total = 0
         self.notified_total = 0
 
@@ -163,7 +164,7 @@ class AutoReplyService:
             try:
                 if self._active():
                     self.run_once()
-            except Exception as e:  # noqa: BLE001 — поток не должен умирать
+            except Exception as e:
                 self.last_error = str(e)
                 self.ctx.log("chat", f"ошибка автоответчика: {e}", level="error")
             delay = self._poll_seconds()
@@ -194,7 +195,7 @@ class AutoReplyService:
                         state[key] = {str(k): v for k, v in value.items()} if isinstance(value, dict) else {}
                 else:  # плоский формат {chat_id: last_reply_iso}
                     state["last_reply"] = {str(k): v for k, v in data.items() if isinstance(v, str)}
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             self.ctx.log("chat", f"не удалось прочитать состояние автоответчика: {e}", level="warning")
         return state
 
@@ -209,7 +210,7 @@ class AutoReplyService:
                 tmp = path.with_name(path.name + ".tmp")
                 tmp.write_text(json.dumps(self._state, ensure_ascii=False, indent=1), encoding="utf-8")
                 os.replace(tmp, path)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 self.ctx.log("chat", f"не удалось сохранить состояние автоответчика: {e}", level="warning")
 
     def _prune_state(self) -> None:
@@ -233,7 +234,7 @@ class AutoReplyService:
             return chats
         return chat.poll_updates(self._runner_state).get("chats") or []
 
-    def _throttled_until(self, chat_key: str, now: datetime) -> Optional[datetime]:
+    def _throttled_until(self, chat_key: str, now: datetime) -> datetime | None:
         hours = float(self.ctx.settings.autoreply.reply_once_per_chat_hours or 0)
         if hours <= 0:
             return None
@@ -263,7 +264,7 @@ class AutoReplyService:
             try:
                 chat = self._chat()
                 chats = self._fetch_chats(chat)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 self._runner_state = None  # в следующий раз начнём с полной страницы чатов
                 msg = f"не удалось получить список чатов FunPay: {e}"
                 result["errors"].append(msg)
@@ -275,7 +276,7 @@ class AutoReplyService:
                 result["checked"] += 1
                 try:
                     self._process_chat(chat, item, reply_enabled, notify_enabled, result)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     msg = f"чат с {item.get('name') or item.get('chat_id')}: {e}"
                     result["errors"].append(msg)
                     self.ctx.log("chat", f"ошибка автоответчика: {msg}", level="error")
@@ -287,8 +288,9 @@ class AutoReplyService:
             self.last_error = result["errors"][-1] if result["errors"] else None
             self._busy.release()
 
-    def _process_chat(self, chat: FunPayChat, item: dict, reply_enabled: bool, notify_enabled: bool,
-                      result: dict) -> None:
+    def _process_chat(
+        self, chat: FunPayChat, item: dict, reply_enabled: bool, notify_enabled: bool, result: dict
+    ) -> None:
         chat_id = int(item["chat_id"])
         key = str(chat_id)
         name = str(item.get("name") or "").strip() or f"чат {chat_id}"
@@ -299,9 +301,9 @@ class AutoReplyService:
 
         # дешёвые отсечения без запросов к FunPay
         if processed.get(key) == marker:
-            return                                   # это сообщение уже обрабатывали
+            return  # это сообщение уже обрабатывали
         if last_id is not None and self._sent_ids.get(chat_id) == last_id:
-            processed[key] = marker                  # последнее сообщение — наш ответ
+            processed[key] = marker  # последнее сообщение — наш ответ
             return
 
         messages = chat.get_history(chat_id, interlocutor_name=name)
@@ -326,26 +328,31 @@ class AutoReplyService:
         # имя собеседника из списка чатов надёжнее имени из HTML сообщения (его может не быть у «склеенных»)
         buyer = str(item.get("name") or "").strip() or str(last.get("author") or "").strip() or name
 
-        reply_sent: Optional[str] = None
+        reply_sent: str | None = None
         if reply_enabled:
             reply_sent = self._reply(chat, chat_id, buyer, text, result)
         if notify_enabled:
             self._notify(chat_id, buyer, text, reply_sent, result)
 
-    def _reply(self, chat: FunPayChat, chat_id: int, buyer: str, text: str, result: dict) -> Optional[str]:
+    def _reply(self, chat: FunPayChat, chat_id: int, buyer: str, text: str, result: dict) -> str | None:
         s = self.ctx.settings.autoreply
         reply, rule = pick_reply(text, s.keywords, s.greeting)
         if not reply:
-            self.ctx.log("chat", f"сообщение от {buyer} без ответа: нет подходящего правила и приветствия",
-                         level="debug")
+            self.ctx.log(
+                "chat", f"сообщение от {buyer} без ответа: нет подходящего правила и приветствия", level="debug"
+            )
             return None
         now = utcnow()
         key = str(chat_id)
         until = self._throttled_until(key, now)
         if until is not None:
             result["throttled"] += 1
-            self.ctx.log("chat", f"{buyer}: ответ пропущен — уже отвечали в этом чате "
-                                 f"(следующий не раньше {until.astimezone().strftime('%H:%M')})", level="debug")
+            self.ctx.log(
+                "chat",
+                f"{buyer}: ответ пропущен — уже отвечали в этом чате "
+                f"(следующий не раньше {until.astimezone().strftime('%H:%M')})",
+                level="debug",
+            )
             return None
         chat.send_message(chat_id, reply)
         self._sent_ids[chat_id] = getattr(chat, "last_sent_message_id", None)
@@ -353,18 +360,21 @@ class AutoReplyService:
         self._save_state()
         result["replied"] += 1
         self.replied_total += 1
-        self.ctx.log("chat", f"ответил {buyer}: {_preview(reply, LOG_PREVIEW_LEN)}",
-                     data={"chat_id": chat_id, "rule": rule, "question": _preview(text, 200)})
+        self.ctx.log(
+            "chat",
+            f"ответил {buyer}: {_preview(reply, LOG_PREVIEW_LEN)}",
+            data={"chat_id": chat_id, "rule": rule, "question": _preview(text, 200)},
+        )
         return reply
 
-    def _notify(self, chat_id: int, buyer: str, text: str, reply: Optional[str], result: dict) -> None:
+    def _notify(self, chat_id: int, buyer: str, text: str, reply: str | None, result: dict) -> None:
         lines = [f"💬 <b>Сообщение от {html.escape(buyer)}</b>", html.escape(_preview(text, NOTIFY_PREVIEW_LEN) or "—")]
         if reply:
             lines.append(f"🤖 Автоответ: {html.escape(_preview(reply, 120))}")
         lines.append(f'<a href="{html.escape(chat_url(chat_id))}">Открыть чат</a>')
         try:
             sent = self.ctx.notify("\n".join(lines), kind="messages")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             sent = False
             self.ctx.log("chat", f"не удалось отправить уведомление о сообщении от {buyer}: {e}", level="warning")
         if sent:
@@ -372,4 +382,4 @@ class AutoReplyService:
             self.notified_total += 1
 
 
-__all__ = ["AutoReplyService", "pick_reply", "STATE_FILE_NAME"]
+__all__ = ["STATE_FILE_NAME", "AutoReplyService", "pick_reply"]

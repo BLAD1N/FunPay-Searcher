@@ -24,10 +24,12 @@
 
 Неизвестный плейсхолдер остаётся в тексте как есть (``{foo}``), ошибок не бывает.
 """
+
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from .matching import normalize_region
 from .models import Listing, MatchResult, Profile
@@ -113,7 +115,7 @@ DEFAULT_DESCRIPTION_RU = """🔥 {game} — аккаунт | {highlights}
 class AttrMap(dict):
     """Атрибуты объявления для ``{attr[имя]}``: отсутствующий ключ -> «»."""
 
-    def __missing__(self, key: str) -> str:  # noqa: D401
+    def __missing__(self, key: str) -> str:
         # ищем без учёта регистра
         k = str(key).strip().lower()
         for dk, dv in self.items():
@@ -313,10 +315,7 @@ def render_lot(listing: Listing, match: MatchResult, profile: Profile, price: fl
     ctx = build_context(listing, match, profile, price)
 
     title_ru = _render_title(tpl.title_ru or DEFAULT_TITLE_RU, ctx)
-    if (tpl.title_en or "").strip():
-        title_en = _render_title(tpl.title_en, ctx)
-    else:
-        title_en = title_ru
+    title_en = _render_title(tpl.title_en, ctx) if (tpl.title_en or "").strip() else title_ru
 
     description_ru = clean_description(render_template(tpl.description_ru or DEFAULT_DESCRIPTION_RU, ctx))
     if (tpl.description_en or "").strip():
@@ -337,8 +336,22 @@ def render_lot(listing: Listing, match: MatchResult, profile: Profile, price: fl
 
 
 __all__ = [
-    "render_lot", "render_template", "build_context", "format_price", "trim_title",
-    "clean_separators", "clean_title", "clean_description", "game_name", "game_short",
-    "GAME_NAMES", "GAME_SHORT", "SOURCE_NAMES", "TITLE_MAX",
-    "DEFAULT_TITLE_RU", "DEFAULT_DESCRIPTION_RU", "SafeDict", "AttrMap",
+    "DEFAULT_DESCRIPTION_RU",
+    "DEFAULT_TITLE_RU",
+    "GAME_NAMES",
+    "GAME_SHORT",
+    "SOURCE_NAMES",
+    "TITLE_MAX",
+    "AttrMap",
+    "SafeDict",
+    "build_context",
+    "clean_description",
+    "clean_separators",
+    "clean_title",
+    "format_price",
+    "game_name",
+    "game_short",
+    "render_lot",
+    "render_template",
+    "trim_title",
 ]

@@ -1,14 +1,13 @@
 """Настройки приложения: config/settings.yaml (создаётся из settings.example.yaml)."""
+
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
-from typing import Optional
 
 import yaml
 from pydantic import BaseModel, Field
-
-import sys
 
 if getattr(sys, "frozen", False):
     # Сборка PyInstaller: конфиг и данные лежат рядом с .exe, а ресурсы — внутри архива (_MEIPASS)
@@ -22,12 +21,13 @@ PROFILES_DIR = CONFIG_DIR / "profiles"
 DATA_DIR = ROOT / "data"
 SETTINGS_FILE = CONFIG_DIR / "settings.yaml"
 SETTINGS_EXAMPLE = CONFIG_DIR / "settings.example.yaml"
-BUNDLED_CONFIG_DIR = BUNDLE_DIR / "config"   # эталонные config/ из сборки (копируются при первом запуске)
+BUNDLED_CONFIG_DIR = BUNDLE_DIR / "config"  # эталонные config/ из сборки (копируются при первом запуске)
 
 
 def ensure_user_dirs() -> None:
     """При первом запуске (особенно из .exe) создаёт config/, профили и data/ рядом с программой."""
     import shutil
+
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     PROFILES_DIR.mkdir(parents=True, exist_ok=True)
     if BUNDLED_CONFIG_DIR != CONFIG_DIR and BUNDLED_CONFIG_DIR.exists():
@@ -40,54 +40,56 @@ def ensure_user_dirs() -> None:
 
 
 class FunPaySettings(BaseModel):
-    golden_key: str = ""                 # cookie golden_key из браузера
-    user_agent: str = ""                 # User-Agent того же браузера
-    proxy: Optional[str] = None          # http://user:pass@host:port
-    request_delay: float = 1.5           # пауза между запросами, сек
+    golden_key: str = ""  # cookie golden_key из браузера
+    user_agent: str = ""  # User-Agent того же браузера
+    proxy: str | None = None  # http://user:pass@host:port
+    request_delay: float = 1.5  # пауза между запросами, сек
     timeout: float = 20.0
-    auto_publish: bool = False           # создавать лоты без подтверждения (по умолчанию — только черновики)
+    auto_publish: bool = False  # создавать лоты без подтверждения (по умолчанию — только черновики)
 
 
 class LolzSettings(BaseModel):
-    token: str = ""                      # https://lolz.team/account/api
-    proxy: Optional[str] = None
-    request_delay: float = 3.0           # лимит API: не чаще 1 запроса в 3 сек
+    token: str = ""  # https://lolz.team/account/api
+    proxy: str | None = None
+    request_delay: float = 3.0  # лимит API: не чаще 1 запроса в 3 сек
     timeout: float = 30.0
 
 
 class MonitorSettings(BaseModel):
     enabled: bool = True
-    interval_minutes: int = 30           # как часто проверять доступность исходных объявлений
-    auto_deactivate: bool = True         # снимать наш лот, если исходник продан/исчез
-    auto_search_minutes: int = 0         # 0 — автопоиск по расписанию выключен
-    orders_check_minutes: int = 5        # как часто проверять новые заказы (продажи) на FunPay; 0 — выключено
-    auto_raise_hours: float = 4.0        # автоподнятие наших лотов на FunPay раз в N часов; 0 — выключено
-    auto_reprice: bool = True            # пересчитывать цену нашего лота, если цена исходника изменилась
+    interval_minutes: int = 30  # как часто проверять доступность исходных объявлений
+    auto_deactivate: bool = True  # снимать наш лот, если исходник продан/исчез
+    auto_search_minutes: int = 0  # 0 — автопоиск по расписанию выключен
+    orders_check_minutes: int = 5  # как часто проверять новые заказы (продажи) на FunPay; 0 — выключено
+    auto_raise_hours: float = 4.0  # автоподнятие наших лотов на FunPay раз в N часов; 0 — выключено
+    auto_reprice: bool = True  # пересчитывать цену нашего лота, если цена исходника изменилась
     reprice_min_change_percent: float = 3.0  # игнорировать изменения цены исходника меньше N%
 
 
 class TelegramSettings(BaseModel):
     enabled: bool = False
-    bot_token: str = ""                  # токен бота от @BotFather
-    chat_id: str = ""                    # ваш chat_id (узнать у @userinfobot) или id канала/группы
-    notify_new_candidates: bool = True   # новые подходящие аккаунты после поиска
-    notify_source_sold: bool = True      # исходник продан/снят — наш лот деактивирован
-    notify_new_orders: bool = True       # новый заказ (продажа) нашего лота на FunPay
-    notify_errors: bool = True           # ошибки авторизации/публикации
-    notify_price_changes: bool = True    # изменилась цена исходника / наш лот переоценён
-    notify_messages: bool = True         # новые сообщения покупателей в чате FunPay
+    bot_token: str = ""  # токен бота от @BotFather
+    chat_id: str = ""  # ваш chat_id (узнать у @userinfobot) или id канала/группы
+    notify_new_candidates: bool = True  # новые подходящие аккаунты после поиска
+    notify_source_sold: bool = True  # исходник продан/снят — наш лот деактивирован
+    notify_new_orders: bool = True  # новый заказ (продажа) нашего лота на FunPay
+    notify_errors: bool = True  # ошибки авторизации/публикации
+    notify_price_changes: bool = True  # изменилась цена исходника / наш лот переоценён
+    notify_messages: bool = True  # новые сообщения покупателей в чате FunPay
 
 
 class AutoReplySettings(BaseModel):
     """Автоответчик в чате FunPay (покупатели пишут перед покупкой)."""
 
     enabled: bool = False
-    poll_seconds: int = 15               # как часто опрашивать новые сообщения
+    poll_seconds: int = 15  # как часто опрашивать новые сообщения
     reply_once_per_chat_hours: float = 12.0  # не отвечать повторно в том же чате чаще, чем раз в N часов
-    greeting: str = ("Здравствуйте! Аккаунт в наличии ✅ Отвечу на любые вопросы в течение нескольких минут. "
-                     "Передача сразу после оплаты, с полным доступом и сменой данных.")
+    greeting: str = (
+        "Здравствуйте! Аккаунт в наличии ✅ Отвечу на любые вопросы в течение нескольких минут. "
+        "Передача сразу после оплаты, с полным доступом и сменой данных."
+    )
     keywords: dict[str, str] = Field(default_factory=dict)  # {"в наличии|есть?": "Да, в наличии ✅", ...}
-    ignore_if_online_minutes: int = 0    # 0 — отвечать всегда; N — не отвечать, если сами были онлайн N минут назад
+    ignore_if_online_minutes: int = 0  # 0 — отвечать всегда; N — не отвечать, если сами были онлайн N минут назад
 
 
 class UISettings(BaseModel):
@@ -108,13 +110,13 @@ class Settings(BaseModel):
 
     # ---- persistence -------------------------------------------------
     @classmethod
-    def load(cls, path: Path = SETTINGS_FILE) -> "Settings":
+    def load(cls, path: Path = SETTINGS_FILE) -> Settings:
         if not path.exists():
             if SETTINGS_EXAMPLE.exists():
                 path.write_text(SETTINGS_EXAMPLE.read_text(encoding="utf-8"), encoding="utf-8")
             else:
                 cls().save(path)
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         s = cls.model_validate(data)
         # переменные окружения имеют приоритет (удобно для запуска без правки файла)

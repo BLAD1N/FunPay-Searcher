@@ -1,4 +1,5 @@
 """Расчёт цены нашего лота по цене исходного объявления."""
+
 from __future__ import annotations
 
 import ast
@@ -8,9 +9,15 @@ import operator
 from .models import PricingRule
 
 _OPS = {
-    ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
-    ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod,
-    ast.Pow: operator.pow, ast.USub: operator.neg, ast.UAdd: operator.pos,
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+    ast.USub: operator.neg,
+    ast.UAdd: operator.pos,
 }
 _FUNCS = {"min": min, "max": max, "round": round, "abs": abs, "floor": math.floor, "ceil": math.ceil}
 
@@ -19,7 +26,7 @@ def safe_eval(expr: str, variables: dict[str, float]) -> float:
     """Безопасное вычисление арифметического выражения (без exec/eval)."""
     tree = ast.parse(expr, mode="eval")
 
-    def _ev(node):
+    def _ev(node: ast.AST) -> float:
         if isinstance(node, ast.Expression):
             return _ev(node.body)
         if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
@@ -37,9 +44,16 @@ def safe_eval(expr: str, variables: dict[str, float]) -> float:
         if isinstance(node, ast.IfExp):
             return _ev(node.body) if _ev(node.test) else _ev(node.orelse)
         if isinstance(node, ast.Compare) and len(node.ops) == 1:
-            l, r = _ev(node.left), _ev(node.comparators[0])
+            lhs, rhs = _ev(node.left), _ev(node.comparators[0])
             op = node.ops[0]
-            return {ast.Lt: l < r, ast.LtE: l <= r, ast.Gt: l > r, ast.GtE: l >= r, ast.Eq: l == r, ast.NotEq: l != r}[type(op)]
+            return {
+                ast.Lt: lhs < rhs,
+                ast.LtE: lhs <= rhs,
+                ast.Gt: lhs > rhs,
+                ast.GtE: lhs >= rhs,
+                ast.Eq: lhs == rhs,
+                ast.NotEq: lhs != rhs,
+            }[type(op)]
         raise ValueError(f"Недопустимая конструкция в формуле: {ast.dump(node)}")
 
     return float(_ev(tree))

@@ -1,34 +1,47 @@
 """Фоновый монитор: проверяет доступность исходников наших лотов и кандидатов, запускает автопоиск."""
+
 from __future__ import annotations
 
 import threading
 import time
 from datetime import timedelta
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from ..models import FoundStatus, LotStatus, utcnow
 from .context import AppContext
 from .publisher import PublisherService
 from .search import SearchService
 
+if TYPE_CHECKING:
+    from .orders import OrdersService
+    from .raiser import RaiserService
+    from .repricer import RepricerService
+
 
 class MonitorService:
-    def __init__(self, ctx: AppContext, publisher: PublisherService, search: SearchService,
-                 orders=None, raiser=None, repricer=None):
+    def __init__(
+        self,
+        ctx: AppContext,
+        publisher: PublisherService,
+        search: SearchService,
+        orders: OrdersService | None = None,
+        raiser: RaiserService | None = None,
+        repricer: RepricerService | None = None,
+    ) -> None:
         self.ctx = ctx
         self.publisher = publisher
         self.search = search
-        self.orders = orders      # OrdersService (опционально)
-        self.raiser = raiser      # RaiserService (опционально)
+        self.orders = orders  # OrdersService (опционально)
+        self.raiser = raiser  # RaiserService (опционально)
         self.repricer = repricer  # RepricerService (опционально)
-        self._last_orders: Optional[float] = None
-        self._last_raise: Optional[float] = None
+        self._last_orders: float | None = None
+        self._last_raise: float | None = None
         self._stop = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._busy = threading.Lock()
-        self.last_run: Optional[str] = None
-        self.next_run: Optional[str] = None
-        self.last_search_auto: Optional[float] = None
+        self.last_run: str | None = None
+        self.next_run: str | None = None
+        self.last_search_auto: float | None = None
         self.last_result: dict = {}
 
     @property
@@ -36,9 +49,14 @@ class MonitorService:
         return self._busy.locked()
 
     def status(self) -> dict:
-        return {"running": self.running, "last_run": self.last_run, "next_run": self.next_run,
-                "interval_minutes": self.ctx.settings.monitor.interval_minutes,
-                "enabled": self.ctx.settings.monitor.enabled, "last_result": self.last_result}
+        return {
+            "running": self.running,
+            "last_run": self.last_run,
+            "next_run": self.next_run,
+            "interval_minutes": self.ctx.settings.monitor.interval_minutes,
+            "enabled": self.ctx.settings.monitor.enabled,
+            "last_result": self.last_result,
+        }
 
     # ---------------------------------------------------------- thread
     def start(self) -> None:
@@ -60,32 +78,43 @@ class MonitorService:
             if s.enabled and self.next_run and now.isoformat() >= self.next_run:
                 try:
                     self.run_once()
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     self.ctx.log("monitor", f"ошибка монитора: {e}", level="error")
                 self.next_run = (utcnow() + timedelta(minutes=max(1, s.interval_minutes))).isoformat()
-            if s.auto_search_minutes and s.auto_search_minutes > 0:
-                if (self.last_search_auto is None or
-                        time.time() - self.last_search_auto >= s.auto_search_minutes * 60):
-                    self.last_search_auto = time.time()
-                    if not self.search.running:
-                        self.ctx.log("search", "автопоиск по расписанию")
-                        self.search.start()
+            if (
+                s.auto_search_minutes
+                and s.auto_search_minutes > 0
+                and (self.last_search_auto is None or time.time() - self.last_search_auto >= s.auto_search_minutes * 60)
+            ):
+                self.last_search_auto = time.time()
+                if not self.search.running:
+                    self.ctx.log("search", "автопоиск по расписанию")
+                    self.search.start()
             # заказы (продажи наших лотов)
-            if self.orders and s.orders_check_minutes and self.ctx.settings.funpay.golden_key:
-                if self._last_orders is None or time.time() - self._last_orders >= s.orders_check_minutes * 60:
-                    self._last_orders = time.time()
-                    try:
-                        self.orders.sync()
-                    except Exception as e:  # noqa: BLE001
-                        self.ctx.log("orders", f"ошибка проверки заказов: {e}", level="error")
+            if (
+                self.orders
+                and s.orders_check_minutes
+                and self.ctx.settings.funpay.golden_key
+                and (self._last_orders is None or time.time() - self._last_orders >= s.orders_check_minutes * 60)
+            ):
+                self._last_orders = time.time()
+                try:
+                    self.orders.sync()
+                except Exception as e:
+                    self.ctx.log("orders", f"ошибка проверки заказов: {e}", level="error")
             # автоподнятие лотов
-            if self.raiser and s.auto_raise_hours and s.auto_raise_hours > 0 and self.ctx.settings.funpay.golden_key:
-                if self._last_raise is None or time.time() - self._last_raise >= s.auto_raise_hours * 3600:
-                    self._last_raise = time.time()
-                    try:
-                        self.raiser.run()
-                    except Exception as e:  # noqa: BLE001
-                        self.ctx.log("raise", f"ошибка автоподнятия: {e}", level="error")
+            if (
+                self.raiser
+                and s.auto_raise_hours
+                and s.auto_raise_hours > 0
+                and self.ctx.settings.funpay.golden_key
+                and (self._last_raise is None or time.time() - self._last_raise >= s.auto_raise_hours * 3600)
+            ):
+                self._last_raise = time.time()
+                try:
+                    self.raiser.run()
+                except Exception as e:
+                    self.ctx.log("raise", f"ошибка автоподнятия: {e}", level="error")
 
     # --------------------------------------------------------- run once
     def run_once(self, max_candidates: int = 100) -> dict:
@@ -100,13 +129,14 @@ class MonitorService:
                 if lot.source_available is False:
                     unavailable += 1
             # 2) кандидаты без лота — чтобы не предлагать проданное
-            for found in self.ctx.storage.list_found(status=[FoundStatus.CANDIDATE.value], limit=max_candidates,
-                                                     order="last_seen DESC"):
+            for found in self.ctx.storage.list_found(
+                status=[FoundStatus.CANDIDATE.value], limit=max_candidates, order="last_seen DESC"
+            ):
                 if self.ctx.storage.get_lot_by_found(found.id):
                     continue
                 try:
                     available = self.ctx.source(found.listing.source).is_available(found.listing.source_id)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     available = None
                 self.ctx.storage.set_found_availability(found.id, available)
                 checked += 1
@@ -120,7 +150,7 @@ class MonitorService:
             if self.repricer:
                 try:
                     self.repricer.run()
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     self.ctx.log("reprice", f"ошибка репрайсинга: {e}", level="error")
             return self.last_result
         finally:

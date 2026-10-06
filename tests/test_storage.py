@@ -11,12 +11,22 @@ def _listing(i="1", price=100.0):
 
 def test_found_upsert_keeps_user_status():
     s = Storage(Path(tempfile.mkdtemp()) / "t.db")
-    f, new = s.upsert_found(Found(profile_id="p", listing=_listing(), match=MatchResult(matched=True, score=2),
-                                  suggested_price=200, status=FoundStatus.CANDIDATE))
+    f, new = s.upsert_found(
+        Found(
+            profile_id="p",
+            listing=_listing(),
+            match=MatchResult(matched=True, score=2),
+            suggested_price=200,
+            status=FoundStatus.CANDIDATE,
+        )
+    )
     assert new and f.id and f.available is True
     s.set_found_status(f.id, FoundStatus.PUBLISHED)
-    f2, new2 = s.upsert_found(Found(profile_id="p", listing=_listing(price=120), match=MatchResult(matched=True),
-                                    status=FoundStatus.CANDIDATE))
+    f2, new2 = s.upsert_found(
+        Found(
+            profile_id="p", listing=_listing(price=120), match=MatchResult(matched=True), status=FoundStatus.CANDIDATE
+        )
+    )
     assert not new2 and f2.id == f.id and f2.status == FoundStatus.PUBLISHED and f2.listing.price == 120
     assert s.count_found() == {"published": 1}
     assert s.list_found(status=["published"])[0].id == f.id
@@ -27,10 +37,14 @@ def test_found_upsert_keeps_user_status():
 def test_lots_roundtrip():
     s = Storage(Path(tempfile.mkdtemp()) / "t.db")
     f, _ = s.upsert_found(Found(profile_id="p", listing=_listing(), match=MatchResult(matched=True)))
-    lot = s.save_lot(OurLot(found_id=f.id, profile_id="p", price=200, source_price=100, source_url="u",
-                            fields={"fields[server]": "ru"}))
+    lot = s.save_lot(
+        OurLot(
+            found_id=f.id, profile_id="p", price=200, source_price=100, source_url="u", fields={"fields[server]": "ru"}
+        )
+    )
     assert lot.id and s.get_lot_by_found(f.id).fields == {"fields[server]": "ru"}
-    lot.status = LotStatus.ACTIVE; lot.funpay_lot_id = 5
+    lot.status = LotStatus.ACTIVE
+    lot.funpay_lot_id = 5
     s.save_lot(lot)
     assert s.list_lots(status=["active"])[0].funpay_lot_id == 5
     s.delete_lot(lot.id)
@@ -55,3 +69,16 @@ def test_price_history_tracks_changes():
     assert s.get_found(f.id).suggested_price == 150
     s.delete_found(f.id)
     assert s.price_history(f.id) == []
+
+
+def test_stats_vacuum_and_idempotent_close():
+    s = Storage(Path(tempfile.mkdtemp()) / "t.db")
+    assert s.stats() == {"found": 0, "lots": 0, "orders": 0, "price_history": 0, "events": 0}
+    f, _ = s.upsert_found(Found(profile_id="p", listing=_listing(), match=MatchResult(matched=True)))
+    s.save_lot(OurLot(found_id=f.id, profile_id="p", price=200, source_price=100, source_url="u"))
+    s.log("k", "m")
+    assert s.stats() == {"found": 1, "lots": 1, "orders": 0, "price_history": 1, "events": 1}
+    s.vacuum()  # не падает и не теряет данные
+    assert s.stats()["found"] == 1
+    s.close()
+    s.close()  # повторный вызов безопасен

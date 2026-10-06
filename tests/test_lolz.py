@@ -1,10 +1,11 @@
 """Тесты источника Lolzteam Market (без сети — httpx.MockTransport)."""
+
 from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 import httpx
 import pytest
@@ -12,10 +13,10 @@ import pytest
 # позволяет запускать `pytest tests/test_lolz.py` без conftest/pytest.ini
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.models import Profile  # noqa: E402
-from app.settings import LolzSettings  # noqa: E402
-from app.sources.base import AuthError, SourceError  # noqa: E402
-from app.sources.lolz import (  # noqa: E402
+from app.models import Profile
+from app.settings import LolzSettings
+from app.sources.base import AuthError, SourceError
+from app.sources.lolz import (
     DEFAULT_BASE_URL,
     FALLBACK_BASE_URL,
     KNOWN_CATEGORIES,
@@ -46,7 +47,7 @@ def item(item_id: int, **extra) -> dict:
     return base
 
 
-def page_response(items: list[dict], per_page: int = 40, total: Optional[int] = None, page: int = 1) -> dict:
+def page_response(items: list[dict], per_page: int = 40, total: int | None = None, page: int = 1) -> dict:
     return {
         "items": items,
         "totalItems": total if total is not None else len(items),
@@ -70,7 +71,7 @@ class Recorder:
 def make_source(
     handler: Callable[[httpx.Request], httpx.Response],
     token: str = "tok",
-    base_url: Optional[str] = None,
+    base_url: str | None = None,
     delay: float = 0.0,
 ) -> tuple[LolzSource, Recorder]:
     rec = Recorder(handler)
@@ -80,7 +81,7 @@ def make_source(
     return src, rec
 
 
-def ok(data, status: int = 200, headers: Optional[dict] = None) -> httpx.Response:
+def ok(data, status: int = 200, headers: dict | None = None) -> httpx.Response:
     return httpx.Response(status, json=data, headers=headers)
 
 
@@ -200,7 +201,7 @@ def test_search_category_pagination_stops_on_partial_page():
             return ok(page_response([item(i) for i in range(1, 41)], per_page=40, total=45, page=1))
         if page == 2:
             return ok(page_response([item(i) for i in range(41, 46)], per_page=40, total=45, page=2))
-        raise AssertionError("лишний запрос страницы %d" % page)
+        raise AssertionError(f"лишний запрос страницы {page}")
 
     src, rec = make_source(handler)
     listings = src.search_category("steam", {"pmin": 100}, pages=5, max_items=500)
@@ -219,7 +220,7 @@ def test_search_category_stops_on_empty_page_and_missing_keys():
 
     src, rec = make_source(handler)
     listings = src.search_category("steam", {}, pages=4)
-    assert [l.source_id for l in listings] == ["1", "2"]
+    assert [x.source_id for x in listings] == ["1", "2"]
     assert len(rec.requests) == 2
 
 
@@ -305,7 +306,7 @@ def test_listing_mapping_currency_and_missing_fields():
 def test_items_without_id_or_price_are_skipped():
     src, _ = make_source(lambda r: ok(page_response([{"price": 1}, {"item_id": 9}, item(10)], per_page=40)))
     listings = src.search_category("steam", {})
-    assert [l.source_id for l in listings] == ["10"]
+    assert [x.source_id for x in listings] == ["10"]
 
 
 # ------------------------------------------------------------ search(profile)
@@ -323,8 +324,8 @@ def test_search_profile_applies_price_and_game_list():
     src, rec = make_source(handler)
     listings = src.search(make_profile())
     assert len(rec.requests) == 1
-    assert [l.source_id for l in listings] == ["1", "2"]
-    assert all(l.game == "dota2" for l in listings)
+    assert [x.source_id for x in listings] == ["1", "2"]
+    assert all(x.game == "dota2" for x in listings)
     assert listings[0].region is None  # регион профиля не подставляем
     assert listings[1].region == "EU"
 
