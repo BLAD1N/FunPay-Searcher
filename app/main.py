@@ -61,6 +61,27 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
     except Exception as e:  # noqa: BLE001 — модули могут отсутствовать в урезанной сборке
         log.warning("сервисы заказов/поднятия недоступны: %s", e)
     monitor = MonitorService(ctx, publisher, search, orders=orders, raiser=raiser)
+    repricer = autoreply = None
+    try:
+        from .services.repricer import RepricerService
+        repricer = RepricerService(ctx, publisher)
+    except Exception as e:  # noqa: BLE001
+        log.warning("сервис репрайсинга недоступен: %s", e)
+    try:
+        from .services.autoreply import AutoReplyService
+        autoreply = AutoReplyService(ctx)
+    except Exception as e:  # noqa: BLE001
+        log.warning("автоответчик недоступен: %s", e)
+
+    def _after_search_finished(stats) -> None:
+        """После поиска цены исходников обновлены — пересчитываем наши лоты."""
+        if repricer and ctx.settings.monitor.auto_reprice:
+            try:
+                repricer.run()
+            except Exception as e:  # noqa: BLE001
+                ctx.log("reprice", f"ошибка репрайсинга: {e}", level="error")
+
+    search.on_finished = _after_search_finished
 
     def _after_search(profile: Profile, new_found: list[Found]) -> None:
         """Новые подходящие находки: автопубликация (если включена) и уведомление в Telegram."""
@@ -80,16 +101,24 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
     app = FastAPI(title="FunPay Searcher", version=__version__, docs_url="/api/docs", redoc_url=None)
     app.state.ctx, app.state.search, app.state.publisher, app.state.monitor = ctx, search, publisher, monitor
     app.state.orders, app.state.raiser = orders, raiser
+    app.state.repricer, app.state.autoreply = repricer, autoreply
 
     @app.on_event("startup")
     def _startup():
         ctx.log("app", f"запуск FunPay Searcher v{__version__}")
         if start_monitor:
             monitor.start()
+            if autoreply:
+                autoreply.start()
 
     @app.on_event("shutdown")
     def _shutdown():
         monitor.stop()
+        if autoreply:
+            try:
+                autoreply.stop()
+            except Exception:  # noqa: BLE001
+                pass
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception):
@@ -157,6 +186,8 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
             "orders": {"paid": len(ctx.storage.list_orders(status=["paid"], limit=100000)),
                        "total": len(ctx.storage.list_orders(limit=100000))},
             "raise": raiser.status() if raiser else None,
+            "reprice": repricer.status() if repricer else None,
+            "autoreply": autoreply.status() if autoreply else None,
             "telegram": {"enabled": bool(getattr(ctx.notifier, "enabled", False))},
         }
 
@@ -591,6 +622,26 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         last = hist[-1]["price"] if hist else f.listing.price
         return {"history": hist, "first": first, "last": last,
                 "change_percent": round((last - first) / first * 100, 1) if first else 0.0}
+
+    # ------------------------------------------------------ reprice / autoreply
+    @app.post("/api/reprice")
+    def reprice_now():
+        if not repricer:
+            raise HTTPException(501, "сервис репрайсинга недоступен")
+        return repricer.run()
+
+    @app.post("/api/autoreply/run")
+    def autoreply_run():
+        _require_funpay()
+        if not autoreply:
+            raise HTTPException(501, "автоответчик недоступен")
+        return autoreply.run_once()
+
+    @app.post("/api/autoreply/preview")
+    def autoreply_preview(body: dict):
+        if not autoreply:
+            raise HTTPException(501, "автоответчик недоступен")
+        return {"reply": autoreply.preview_reply(str(body.get("text", "")))}
 
     # ----------------------------------------------------------- utilities
     @app.get("/api/events")

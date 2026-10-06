@@ -111,6 +111,8 @@ class TelegramNotifier:
         "sold": "notify_source_sold",
         "order": "notify_new_orders",
         "error": "notify_errors",
+        "price": "notify_price_changes",
+        "messages": "notify_messages",
     }
     min_interval = 1.0   # не чаще одного сообщения в секунду
     timeout = 15.0

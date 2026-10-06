@@ -24,6 +24,8 @@ class SearchService:
         self.last_finished: Optional[str] = None
         # вызывается после каждой задачи (профиль+источник) со списком НОВЫХ подходящих находок
         self.on_new_candidates: Optional[Callable[[Profile, list[Found]], None]] = None
+        # вызывается по завершении всего прогона со статистикой
+        self.on_finished: Optional[Callable[[list[SearchRunStats]], None]] = None
 
     # ----------------------------------------------------------- state
     @property
@@ -136,6 +138,11 @@ class SearchService:
         self.last = stats_all
         self.last_finished = utcnow().isoformat()
         self.ctx.log("search", "поиск завершён")
+        if self.on_finished:
+            try:
+                self.on_finished(stats_all)
+            except Exception as e:  # noqa: BLE001
+                self.ctx.log("search", f"обработчик завершения поиска: {e}", level="error")
         return stats_all
 
     def _process(self, profile: Profile, listing) -> tuple[Found, bool]:
