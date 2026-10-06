@@ -1,4 +1,5 @@
 """Тесты диагностики парсеров (app/diagnostics.py) на фикстурах FunPay (сети нет — httpx.MockTransport)."""
+
 from __future__ import annotations
 
 import json
@@ -21,8 +22,19 @@ FIXTURES = Path(__file__).parent / "fixtures" / "funpay"
 USERNAME = "TestSeller"
 CSRF = "csrf-token-test-123"
 GOLDEN_KEY = "goldenkey-diag-secret"
-PRIVATE = (USERNAME, CSRF, GOLDEN_KEY, "Ivan_Seller", "EuroTrader", "na_dealer", "Buyer_One", "second_buyer",
-           "refund_guy", "777001", "в наличии")
+PRIVATE = (
+    USERNAME,
+    CSRF,
+    GOLDEN_KEY,
+    "Ivan_Seller",
+    "EuroTrader",
+    "na_dealer",
+    "Buyer_One",
+    "second_buyer",
+    "refund_guy",
+    "777001",
+    "в наличии",
+)
 
 
 def load(name: str) -> str:
@@ -35,8 +47,8 @@ class FakeFunPay:
     def __init__(self):
         self.requests: list[httpx.Request] = []
         self.logged_out = False
-        self.break_lots = False      # «сломать» разметку списка лотов (a.tc-item -> a.tc-row)
-        self.explode = False         # 500 на всё, кроме главной
+        self.break_lots = False  # «сломать» разметку списка лотов (a.tc-item -> a.tc-row)
+        self.explode = False  # 500 на всё, кроме главной
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -79,7 +91,13 @@ class FakeLolz:
     def check_auth(self):
         self.calls.append("me")
         if not self.ok:
-            return {"ok": False, "username": None, "user_id": None, "balance": None, "error": "токен Lolzteam невалиден"}
+            return {
+                "ok": False,
+                "username": None,
+                "user_id": None,
+                "balance": None,
+                "error": "токен Lolzteam невалиден",
+            }
         return {"ok": True, "username": "neo", "user_id": 42, "balance": 10.5, "error": None}
 
     def categories(self):
@@ -92,18 +110,32 @@ class FakeLolz:
 
     def search_category(self, category, params=None, pages=1, max_items=500):
         self.calls.append(f"search:{category}")
-        return [Listing(source="lolz", source_id="500", url="https://lzt.market/500", title="WoT acc", price=2000,
-                        seller_name="seller77", attributes={"raw_keys": ["item_id", "price", "seller"]})]
+        return [
+            Listing(
+                source="lolz",
+                source_id="500",
+                url="https://lzt.market/500",
+                title="WoT acc",
+                price=2000,
+                seller_name="seller77",
+                attributes={"raw_keys": ["item_id", "price", "seller"]},
+            )
+        ]
 
 
-def make_ctx(tmp_path: Path, fake: FakeFunPay, lolz: FakeLolz | None = None, golden_key: str = GOLDEN_KEY) -> AppContext:
+def make_ctx(
+    tmp_path: Path, fake: FakeFunPay, lolz: FakeLolz | None = None, golden_key: str = GOLDEN_KEY
+) -> AppContext:
     settings = Settings()
     settings.funpay.golden_key = golden_key
     settings.funpay.request_delay = 0
     settings.lolz.token = "lolz-token-secret"
-    ctx = AppContext(settings=settings, storage=Storage(tmp_path / "db.sqlite"), profiles=ProfileStore(tmp_path / "profiles"))
-    src = FunPaySource(FunPaySettings(golden_key=golden_key, request_delay=0, timeout=5),
-                       transport=httpx.MockTransport(fake.handler))
+    ctx = AppContext(
+        settings=settings, storage=Storage(tmp_path / "db.sqlite"), profiles=ProfileStore(tmp_path / "profiles")
+    )
+    src = FunPaySource(
+        FunPaySettings(golden_key=golden_key, request_delay=0, timeout=5), transport=httpx.MockTransport(fake.handler)
+    )
     src.retry_backoff = 0
     ctx._funpay = src
     ctx._lolz = lolz or FakeLolz()
@@ -123,18 +155,36 @@ def by_name(report: dict) -> dict[str, dict]:
 
 # ----------------------------------------------------------------------------- sanitize_html
 def test_sanitize_html_removes_secrets_and_names():
-    html = (load("main_page.html") + load("lots_list.html") + load("chat_list.html") + load("orders_trade.html")
-            + '<input value="x" name="csrf_token"> Cookie: golden_key=abc.def; PHPSESSID=s1 '
-            + 'mail user@example.com tel +7 (999) 123-45-67 <span class="badge-balance">1 234 ₽</span>')
+    html = (
+        load("main_page.html")
+        + load("lots_list.html")
+        + load("chat_list.html")
+        + load("orders_trade.html")
+        + '<input value="x" name="csrf_token"> Cookie: golden_key=abc.def; PHPSESSID=s1 '
+        + 'mail user@example.com tel +7 (999) 123-45-67 <span class="badge-balance">1 234 ₽</span>'
+    )
     out = sanitize_html(html, extra_secrets=["abc.def"])
-    for secret in (USERNAME, CSRF, "Ivan_Seller", "EuroTrader", "Buyer_One", "refund_guy", "user@example.com",
-                   "123-45-67", "abc.def", "PHPSESSID=s1", "/users/5001/", "1 234 ₽", "в наличии"):
+    for secret in (
+        USERNAME,
+        CSRF,
+        "Ivan_Seller",
+        "EuroTrader",
+        "Buyer_One",
+        "refund_guy",
+        "user@example.com",
+        "123-45-67",
+        "abc.def",
+        "PHPSESSID=s1",
+        "/users/5001/",
+        "1 234 ₽",
+        "в наличии",
+    ):
         assert secret not in out, secret
     assert 'data-app-data="***"' in out
-    assert 'name="csrf_token"' in out            # структура формы сохранена, значение скрыто
+    assert 'name="csrf_token"' in out  # структура формы сохранена, значение скрыто
     assert "golden_key=***" in out and "PHPSESSID=***" in out
-    assert 'class="tc-item"' in out and "tc-desc-text" in out and "contact-item" in out   # селекторы остались
-    assert "15 000 ₽" in out                      # цены лотов не трогаем
+    assert 'class="tc-item"' in out and "tc-desc-text" in out and "contact-item" in out  # селекторы остались
+    assert "15 000 ₽" in out  # цены лотов не трогаем
     assert sanitize_html(None) == "" and sanitize_html("") == ""
 
 
@@ -153,9 +203,21 @@ def test_run_diagnostics_all_ok(tmp_path: Path, data_dir: Path):
     report = run_diagnostics(ctx)
 
     checks = by_name(report)
-    expected = ["funpay_login", "funpay_categories", "funpay_list_lots", "funpay_list_filters", "funpay_get_listing",
-                "funpay_lot_form", "funpay_my_lots", "funpay_sales", "funpay_chats",
-                "lolz_me", "lolz_categories", "lolz_params", "lolz_search"]
+    expected = [
+        "funpay_login",
+        "funpay_categories",
+        "funpay_list_lots",
+        "funpay_list_filters",
+        "funpay_get_listing",
+        "funpay_lot_form",
+        "funpay_my_lots",
+        "funpay_sales",
+        "funpay_chats",
+        "lolz_me",
+        "lolz_categories",
+        "lolz_params",
+        "lolz_search",
+    ]
     assert [c["name"] for c in report["checks"]] == expected
     for name in expected:
         assert checks[name]["ok"] is True, (name, checks[name])
@@ -163,7 +225,12 @@ def test_run_diagnostics_all_ok(tmp_path: Path, data_dir: Path):
         assert set(checks[name]) >= {"name", "ok", "details", "elapsed_ms", "hint"}
     assert report["ok"] is True
     assert report["app_version"] and report["python"] and report["platform"] and report["timestamp"]
-    assert report["settings"] == {"golden_key_set": True, "token_set": True, "proxy_set": False, "user_agent_set": False}
+    assert report["settings"] == {
+        "golden_key_set": True,
+        "token_set": True,
+        "proxy_set": False,
+        "user_agent_set": False,
+    }
 
     # содержимое проверок
     assert "World of Tanks: найдена" in checks["funpay_categories"]["details"]
@@ -171,7 +238,9 @@ def test_run_diagnostics_all_ok(tmp_path: Path, data_dir: Path):
     assert "лотов 4, с ценой 4, с продавцом 4, с заголовком 4" in checks["funpay_list_lots"]["details"]
     assert checks["funpay_list_lots"]["selectors"]["a.tc-item"] == 4
     assert "f-server" in checks["funpay_list_filters"]["details"]
-    assert "сервер" in checks["funpay_get_listing"]["details"] and "15 000" not in checks["funpay_get_listing"]["details"]
+    assert (
+        "сервер" in checks["funpay_get_listing"]["details"] and "15 000" not in checks["funpay_get_listing"]["details"]
+    )
     assert "fields[summary][ru]" in checks["funpay_lot_form"]["details"]
     assert checks["funpay_lot_form"]["selectors"]["input[name=csrf_token]"] == 1
     assert "наших лотов в подкатегории 148: 3" in checks["funpay_my_lots"]["details"]
@@ -233,8 +302,16 @@ def test_login_failure_skips_remaining_funpay_checks(tmp_path: Path, data_dir: P
     assert login["selectors"]["div.user-link-name"] == 0 and login["selectors"]["div.promo-game-list"] >= 1
     assert "snippet" in login and len(login["snippet"]) <= 300 and USERNAME not in login["snippet"]
     assert login["snapshot"] == "funpay_login.html"
-    for name in ("funpay_categories", "funpay_list_lots", "funpay_list_filters", "funpay_get_listing",
-                 "funpay_lot_form", "funpay_my_lots", "funpay_sales", "funpay_chats"):
+    for name in (
+        "funpay_categories",
+        "funpay_list_lots",
+        "funpay_list_filters",
+        "funpay_get_listing",
+        "funpay_lot_form",
+        "funpay_my_lots",
+        "funpay_sales",
+        "funpay_chats",
+    ):
         assert checks[name]["ok"] is None, name
         assert "пропущено" in checks[name]["details"]
     # только один запрос к FunPay — на главную
@@ -264,7 +341,9 @@ def test_broken_lots_markup_is_reported_with_selectors(tmp_path: Path, data_dir:
     assert lots["ok"] is False
     assert "a.tc-item" in lots["hint"]
     assert lots["selectors"]["a.tc-item"] == 0 and lots["selectors"][".showcase-filters"] == 1
-    assert lots["snippet"] and "tc-row" in (data_dir / "diagnostics" / "funpay_list_lots.html").read_text(encoding="utf-8")
+    assert lots["snippet"] and "tc-row" in (data_dir / "diagnostics" / "funpay_list_lots.html").read_text(
+        encoding="utf-8"
+    )
     # фильтры на той же странице целы, лота-образца нет -> страница лота пропущена, форма и остальное — работают
     assert checks["funpay_list_filters"]["ok"] is True
     assert checks["funpay_get_listing"]["ok"] is None
@@ -279,9 +358,15 @@ def test_exceptions_are_recorded_not_raised(tmp_path: Path, data_dir: Path):
     report = run_diagnostics(make_ctx(tmp_path, fake, FakeLolz(ok=False)))
     checks = by_name(report)
     assert checks["funpay_login"]["ok"] is True
-    assert checks["funpay_categories"]["ok"] is True          # категории с главной (кэш)
-    for name in ("funpay_list_lots", "funpay_list_filters", "funpay_lot_form", "funpay_my_lots", "funpay_sales",
-                 "funpay_chats"):
+    assert checks["funpay_categories"]["ok"] is True  # категории с главной (кэш)
+    for name in (
+        "funpay_list_lots",
+        "funpay_list_filters",
+        "funpay_lot_form",
+        "funpay_my_lots",
+        "funpay_sales",
+        "funpay_chats",
+    ):
         assert checks[name]["ok"] is False, name
         assert checks[name]["details"].startswith("SourceError:"), checks[name]["details"]
         assert checks[name]["hint"]

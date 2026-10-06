@@ -1,4 +1,5 @@
 """Тесты стартовых профилей (config/profiles/*.yaml) и примера настроек."""
+
 from __future__ import annotations
 
 import re
@@ -19,10 +20,27 @@ PROFILES_DIR = ROOT / "config" / "profiles"
 SETTINGS_EXAMPLE = ROOT / "config" / "settings.example.yaml"
 
 EXPECTED_IDS = {
-    "wot_ru_tops", "wot_eu_tops", "wot_na_tops", "wot_asia_tops", "wot_blitz",
-    "dota2_high_mmr", "cs2_prime", "fortnite_skins", "genshin", "valorant",
-    "pubg", "apex", "brawl_stars", "clash_royale", "standoff2", "roblox", "eft",
-    "warface", "lol", "steam_inventory", "any_game_cheap_tops",
+    "wot_ru_tops",
+    "wot_eu_tops",
+    "wot_na_tops",
+    "wot_asia_tops",
+    "wot_blitz",
+    "dota2_high_mmr",
+    "cs2_prime",
+    "fortnite_skins",
+    "genshin",
+    "valorant",
+    "pubg",
+    "apex",
+    "brawl_stars",
+    "clash_royale",
+    "standoff2",
+    "roblox",
+    "eft",
+    "warface",
+    "lol",
+    "steam_inventory",
+    "any_game_cheap_tops",
 }
 ENABLED_BY_DEFAULT = {"wot_ru_tops", "dota2_high_mmr", "cs2_prime"}
 
@@ -30,12 +48,47 @@ ENABLED_BY_DEFAULT = {"wot_ru_tops", "dota2_high_mmr", "cs2_prime"}
 LEAKING_PLACEHOLDERS = ("{seller}", "{source}", "{source_title}", "{source_description}")
 
 # Слишком общие слова: в must_any они дают сплошные ложные срабатывания.
-TOO_GENERIC_ALTS = {"акк", "аккаунт", "account", "премиум", "premium", "прем", "скин", "скины",
-                    "skin", "skins", "инвентарь", "inventory", "рейтинг", "rating", "редкие", "редкий",
-                    "rare", "танки", "tanks", "игра", "game"}
+TOO_GENERIC_ALTS = {
+    "акк",
+    "аккаунт",
+    "account",
+    "премиум",
+    "premium",
+    "прем",
+    "скин",
+    "скины",
+    "skin",
+    "skins",
+    "инвентарь",
+    "inventory",
+    "рейтинг",
+    "rating",
+    "редкие",
+    "редкий",
+    "rare",
+    "танки",
+    "tanks",
+    "игра",
+    "game",
+}
 # Голые стоп-слова, которые отсекают хорошие объявления («без бана», «no ban», «обмен доступен»).
-DANGEROUS_EXCLUDES = {"бан", "ban", "обмен", "trade", "временно", "без привязки", "прокачка", "чит*",
-                      "vac", "ключ", "key", "холд", "чистый", "пин", "pin"}
+DANGEROUS_EXCLUDES = {
+    "бан",
+    "ban",
+    "обмен",
+    "trade",
+    "временно",
+    "без привязки",
+    "прокачка",
+    "чит*",
+    "vac",
+    "ключ",
+    "key",
+    "холд",
+    "чистый",
+    "пин",
+    "pin",
+}
 
 
 @pytest.fixture(scope="module")
@@ -47,10 +100,7 @@ def profiles() -> dict[str, Profile]:
 
 @pytest.fixture(scope="module")
 def raw_profiles() -> dict[str, dict]:
-    return {
-        p.stem: yaml.safe_load(p.read_text(encoding="utf-8"))
-        for p in PROFILES_DIR.glob("*.yaml")
-    }
+    return {p.stem: yaml.safe_load(p.read_text(encoding="utf-8")) for p in PROFILES_DIR.glob("*.yaml")}
 
 
 def _alts(term: str) -> list[str]:
@@ -61,17 +111,25 @@ def _alts(term: str) -> list[str]:
 
 
 def _listing(title: str, price: float, region=None, source="funpay", **attrs) -> Listing:
-    return Listing(source=source, source_id="1", url="https://funpay.com/lots/offer?id=1",
-                   title=title, price=price, region=region, seller_name="SELLER_XYZ_777",
-                   attributes=attrs)
+    return Listing(
+        source=source,
+        source_id="1",
+        url="https://funpay.com/lots/offer?id=1",
+        title=title,
+        price=price,
+        region=region,
+        seller_name="SELLER_XYZ_777",
+        attributes=attrs,
+    )
 
 
 def _example_listing(item, p: Profile) -> Listing:
     mid = (p.criteria.price.min + p.criteria.price.max) / 2
     if isinstance(item, str):
         item = {"text": item}
-    return _listing(item["text"], item.get("price", mid), region=item.get("region", p.region),
-                    **(item.get("attrs") or {}))
+    return _listing(
+        item["text"], item.get("price", mid), region=item.get("region", p.region), **(item.get("attrs") or {})
+    )
 
 
 # ----------------------------------------------------------------- загрузка --
@@ -173,9 +231,12 @@ def test_excludes_do_not_contradict_positives(profiles):
     срабатывать как стоп-слово — иначе профиль противоречит сам себе."""
     for p in profiles.values():
         c = p.criteria
-        positives = [(kind, term, alt) for kind, terms in (("must_any", c.must_any), ("must_all", c.must_all),
-                                                           ("highlights", c.highlights))
-                     for term in terms for alt in _alts(term)]
+        positives = [
+            (kind, term, alt)
+            for kind, terms in (("must_any", c.must_any), ("must_all", c.must_all), ("highlights", c.highlights))
+            for term in terms
+            for alt in _alts(term)
+        ]
         for kind, term, alt in positives:
             for ex in c.exclude:
                 hit = _match_norm(alt, ex)
@@ -198,9 +259,19 @@ def test_pricing_gives_profit(profiles):
 
 
 def test_lot_templates_render_and_do_not_leak(profiles):
-    match = MatchResult(matched=True, score=4.0,
-                        highlights=["Chieftain", "Об. 279 (р)", "Carro 45t", "Kampfpanzer 07 RH",
-                                    "VK 72.01 K", "Коллекционер", "Полный доступ"])
+    match = MatchResult(
+        matched=True,
+        score=4.0,
+        highlights=[
+            "Chieftain",
+            "Об. 279 (р)",
+            "Carro 45t",
+            "Kampfpanzer 07 RH",
+            "VK 72.01 K",
+            "Коллекционер",
+            "Полный доступ",
+        ],
+    )
     for p in profiles.values():
         tpl = p.lot_template
         for field in ("title_ru", "title_en", "description_ru", "description_en"):
@@ -313,8 +384,10 @@ def test_settings_example_has_comments_for_secrets():
 
 def test_wot_ru_matches_realistic_listing(profiles):
     p = profiles["wot_ru_tops"]
-    r = evaluate(_listing("Аккаунт Мир танков Lesta: все топы, Chieftain, Об. 279 (р), E 100, 20к голды",
-                          15000, region="RU"), p.criteria)
+    r = evaluate(
+        _listing("Аккаунт Мир танков Lesta: все топы, Chieftain, Об. 279 (р), E 100, 20к голды", 15000, region="RU"),
+        p.criteria,
+    )
     assert r.matched, r.rejections
     assert "Chieftain" in r.highlights and "Об. 279 (р)" in r.highlights and "E 100" in r.highlights
     lot = render_lot(_listing("x", 15000, region="RU"), r, p, calculate_price(15000, p.pricing))
