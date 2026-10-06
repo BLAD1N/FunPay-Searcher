@@ -634,6 +634,7 @@ async function pageDashboard(root) {
   const sel = { profiles: new Set(), sources: new Set() };    // пусто = все
   let extra = { found: [], lots: [], events: [] };
   let wasRunning = !!(status.search && status.search.running);
+  let lastFinished = status.search && status.search.last_finished;
   let tickCount = 0;
 
   const progressBox = h('div'), tilesBox = h('div', { class: 'grid grid-5' }), lastBox = h('div'), monitorBox = h('div'), eventsBox = h('div');
@@ -774,9 +775,14 @@ async function pageDashboard(root) {
     // раз в 60 с обновляем бейдж чатов — только если страница чатов уже открывалась (не нагружаем FunPay зря)
     if (++tickCount % 30 === 0 && state.chatUnread != null) API.get('/api/chat').then(setChatUnread).catch(() => {});
     const running = !!(st.search && st.search.running);
-    if (wasRunning && !running) { toast('Поиск завершён', 'success'); await loadExtra(); }
+    const finished = st.search && st.search.last_finished;
+    // завершение ловим и по переходу running→false, и по новому времени last_finished:
+    // быстрый поиск (нет ключей/источников) может закончиться между двумя опросами
+    const justFinished = (wasRunning && !running) || (!running && finished && finished !== lastFinished);
+    if (justFinished) { toast('Поиск завершён', 'success'); await loadExtra(); }
     else if (running) { extra.events = await API.get('/api/events' + qs({ limit: 10 })).catch(() => extra.events); renderEvents(); }
     wasRunning = running;
+    lastFinished = finished;
     renderAll(st);
   };
 
@@ -1130,7 +1136,9 @@ async function pageProfileEditor(root, id) {
     const runTest = async () => {
       const r = await API.post('/api/matching/test', { profile: model, text: tester.text, price: toNum(tester.price) ?? 0 });
       replace(resultBox, h('div', { class: 'result-box ' + (r.matched ? 'ok' : 'bad') },
-        h('div', { class: 'row mb-8' }, h('span', { class: 'chip ' + (r.matched ? 'success' : 'danger') }, r.matched ? 'Подходит' : 'Не подходит'), h('span', { class: 'score' }, 'баллы: ' + fmtNum(r.score)), (r.highlights || []).map(x => h('span', { class: 'chip hl' }, x))),
+        h('div', { class: 'row mb-8' }, h('span', { class: 'chip ' + (r.matched ? 'success' : 'danger') }, r.matched ? 'Подходит' : 'Не подходит'), h('span', { class: 'score' }, 'баллы: ' + fmtNum(r.score)),
+          r.suggested_price != null ? h('span', { class: 'chip accent', title: 'цена лота по правилу наценки' }, 'наша цена: ' + fmtMoney(r.suggested_price)) : null,
+          (r.highlights || []).map(x => h('span', { class: 'chip hl' }, x))),
         (r.reasons || []).length ? [h('div', { class: 'label' }, 'Совпадения'), h('ul', { class: 'list-plain' }, r.reasons.map(x => h('li', {}, x)))] : null,
         (r.rejections || []).length ? [h('div', { class: 'label mt-8 danger' }, 'Причины отклонения'), h('ul', { class: 'list-plain' }, r.rejections.map(x => h('li', {}, x)))] : null));
     };

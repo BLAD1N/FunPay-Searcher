@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Optional
 
@@ -103,22 +104,22 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
     app.state.orders, app.state.raiser = orders, raiser
     app.state.repricer, app.state.autoreply = repricer, autoreply
 
-    @app.on_event("startup")
-    def _startup():
+    @asynccontextmanager
+    async def _lifespan(_app: FastAPI):
         ctx.log("app", f"запуск FunPay Searcher v{__version__}")
         if start_monitor:
             monitor.start()
             if autoreply:
                 autoreply.start()
-
-    @app.on_event("shutdown")
-    def _shutdown():
+        yield
         monitor.stop()
         if autoreply:
             try:
                 autoreply.stop()
             except Exception:  # noqa: BLE001
                 pass
+
+    app.router.lifespan_context = _lifespan
 
     @app.middleware("http")
     async def _same_origin_guard(request: Request, call_next):
