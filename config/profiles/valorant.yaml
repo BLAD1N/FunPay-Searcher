@@ -1,6 +1,7 @@
 # ============================================================================
 #  Профиль поиска: Valorant — аккаунты со скинами и высоким рангом
-#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml.
+#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml, полный шаблон
+#  со всеми опциями — any_game_cheap_tops.yaml.
 # ============================================================================
 id: valorant
 name: "Valorant — скины и ранг"
@@ -8,8 +9,8 @@ game: valorant
 region: null                     # регионы Riot: EU / NA / AP / BR / KR / TR — ограничьте через regions при необходимости
 enabled: false
 description: >-
-  Аккаунты Valorant с дорогими коллекциями скинов (Reaver, Elderflame, Prime,
-  Champions...) и высоким рангом (Immortal/Radiant).
+  Аккаунты Valorant с дорогими коллекциями (Reaver, Prime, Elderflame, Champions,
+  Glitchpop...), ножами и высоким рангом (Immortal/Radiant).
 
 sources:
   funpay:
@@ -24,13 +25,11 @@ sources:
   lolz:
     enabled: true
     category: riot                 # на Lolz аккаунты Riot (Valorant/LoL) — категория riot
-    # Имена параметров проверьте в UI -> «Lolz» -> «Параметры» (категория riot).
     params:
-      order_by: price_to_up
-      # game: valorant             # только Valorant (пример; проверьте имя параметра)
-      # valorant_skins_min: 10
-      # pmin: 1000
-      # pmax: 40000
+      order_by: price_to_up        # документированный параметр
+      # valorant_region: eu        # регион — проверьте через Параметры
+      # skins_min: 10              # минимум скинов — проверьте через Параметры
+      # vp_min: 1000               # минимум VP — проверьте через Параметры
     pages: 3
     max_items: 500
 
@@ -38,52 +37,68 @@ criteria:
   price:
     min: 1000
     max: 40000
+  # Убраны «скины», «коллекция», «бандл», «VP» — есть в каждом объявлении. Оставлены ранги и конкретные коллекции.
   must_any:
-    - "Скины => скин*|skin*|коллекц*|collection|бандл*|bundle*"
-    - "Immortal => immortal|иммортал*|имморт*|бессмерт*"
     - "Radiant => radiant|радиант*"
-    - "Ascendant => ascendant|асцендент*|асендант*"
+    - "Immortal => immortal|иммортал*|имморт*|бессмерт*"
+    - "Ascendant => ascendant|асцендент*|асендант*|асцендант*"
     - "Reaver => reaver|ривер"
     - "Elderflame => elderflame|элдерфлейм|элдер*"
     - "Prime => prime|прайм"
     - "Champions => champions|чемпион*"
     - "Glitchpop => glitchpop|глитчпоп"
     - "Sovereign => sovereign|соверен"
-    - "Oni => oni"
-    - "RGX => rgx|ргх"
-    - "Ion => ion|ион"
-    - "VP => vp|валорант поинт*|valorant point*"
-  must_all: []
-  exclude:
-    - "бан|ban|banned|забанен*|заблокирован*"
-    - "без почты|без доступа к почте|no email"
-    - "аренда|в аренду|буст*|boost*|калибровк*"
-    - "обмен|только обмен"
-    - "смурф*|smurf*|чист* аккаунт*|пуст* аккаунт*|fresh account"   # пустые аккаунты — не наш сегмент
-  regex_any: []
-  regex_exclude: []
-  numeric: []
-  # numeric:
-  #   - {field: valorant_skins, min: 10}
-  highlights:
-    - "Radiant => radiant|радиант*"
-    - "Immortal => immortal|иммортал*|имморт*|бессмерт*"
-    - "Ascendant => ascendant|асцендент*|асендант*"
-    - "Reaver => reaver|ривер"
-    - "Elderflame => elderflame|элдерфлейм|элдер*"
-    - "Prime => prime|прайм"
-    - "Champions => champions|чемпион*"
-    - "Glitchpop => glitchpop|глитчпоп"
-    - "Sovereign => sovereign|соверен"
-    - "Oni => oni"
+    - "Oni => oni|они нож*"
     - "RGX => rgx|ргх"
     - "Ion => ion|ион"
     - "Spectrum => spectrum|спектрум"
     - "Araxys => araxys|араксис"
     - "Kuronami => kuronami|куронами"
-    - "Knife => нож*|knife|melee|мили"
+    - "Arcane => arcane|аркейн"
+    - "Protocol 781-A => protocol|протокол"
+    - "Нож => нож*|knife|melee|мили|бабочка|butterfly|карамбит|karambit"
+    - "Старый аккаунт => episode 1|эпизод 1|ep1|ep 1|closed beta|закрыт* бет*|с беты|2020 год*"
+    - "Большая коллекция => 30 скин*|40 скин*|50 скин*|60 скин*|70 скин*|80 скин*|100 скин*|150 скин*|30 skin*|40 skin*|50 skin*|100 skin*|150 skin*"
+  must_all: []
+  exclude:
+    - "забанен*|заблокирован*|banned|в бане|есть бан|стоит бан|словил бан|получил бан|с баном|пермабан|перма бан|permanent* ban*|perma ban"
+    - "без почты|без доступа к почте|почта не выдается|почта не дается|без привязки почты|без привязки к почте|почта не привязана|no email|without email|no mail access"
+    - "аренда|в аренду|арендовать|прокат|rent|rental|for rent|временн* доступ*|временн* аккаунт*|временное пользование|temporary access"
+    - "только обмен|на обмен|обменяю|меняю на|обмен на|trade only|for trade|swap only"
+    - "буст|бустинг|boost|boosting|boosted|калибровк*|calibration|прокачаю|накрутк*|услуг* прокачк*|elo boost|rank up service"
+    - "смурф*|smurf*|пуст* акк*|fresh account|new account|новый аккаунт|стартов*|starter*|unranked smurf"   # «чистый аккаунт» не пишем — это «без банов»
+    - "vp по курсу|пополнение|top up|топ ап|валорант поинты по курсу"
+    - "hardware ban|hwid ban|хвид бан|vanguard ban|бан вангард*"
+  regex_any: []
+  regex_exclude:
+    - '(есть|стоит|имеется|получен|словил|словлен|with|has)\s+(бан|ban)'
+  numeric: []
+  # numeric:
+  #   - {field: valorant_skins, min: 10}     # проверьте имя поля через attributes["raw_keys"]
+  highlights:
+    - "Radiant => radiant|радиант*"
+    - "Immortal => immortal|иммортал*|имморт*|бессмерт*"
+    - "Ascendant => ascendant|асцендент*|асендант*|асцендант*"
+    - "Reaver => reaver|ривер"
+    - "Elderflame => elderflame|элдерфлейм|элдер*"
+    - "Prime => prime|прайм"
+    - "Champions => champions|чемпион*"
+    - "Glitchpop => glitchpop|глитчпоп"
+    - "Sovereign => sovereign|соверен"
+    - "Oni => oni|они нож*"
+    - "RGX => rgx|ргх"
+    - "Ion => ion|ион"
+    - "Spectrum => spectrum|спектрум"
+    - "Araxys => araxys|араксис"
+    - "Kuronami => kuronami|куронами"
+    - "Arcane => arcane|аркейн"
+    - "Protocol 781-A => protocol|протокол"
+    - "Нож => нож*|knife|melee|мили|бабочка|butterfly|карамбит|karambit"
+    - "Старый аккаунт => episode 1|эпизод 1|ep1|ep 1|closed beta|закрыт* бет*|с беты|2020 год*"
+    - "Большая коллекция => 30 скин*|40 скин*|50 скин*|60 скин*|70 скин*|80 скин*|100 скин*|150 скин*|30 skin*|40 skin*|50 skin*|100 skin*|150 skin*"
+    - "VP => vp|валорант поинт*|valorant point*"
     - "Battle Pass => battle pass|батл пасс|батлпасс|бп"
-    - "Родная почта => родная почта|native mail|полный доступ|full access"
+    - "Полный доступ => полный доступ|full access|родная почта|native mail|native email|первая почта"
   regions: []
   min_score: 1.0
   seller_min_reviews: null
@@ -101,11 +116,43 @@ pricing:
 
 lot_template:
   funpay_subcategory_id: null
-  title_ru: ""
-  title_en: ""
-  description_ru: ""
+  title_ru: "💎 {game} | {highlights} | Полный доступ, смена почты"
+  title_en: "💎 {game} account | {highlights} | Full access"
+  description_ru: |
+    💎 {game} — аккаунт с коллекцией скинов
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    📦 Что внутри:
+    {highlights_lines}
+
+    🛡 Гарантии магазина:
+    ✔ Аккаунт проверяется перед передачей покупателю
+    ✔ Полный доступ к Riot — меняете пароль, почту и 2FA на свои
+    ✔ Помогаем с первым входом и сменой данных
+    ✔ Сделка через FunPay — деньги под защитой площадки
+
+    🚚 Доставка:
+    • Регион: {region}
+    • Выдача данных в чате после оплаты, обычно 10–60 минут
+    • Полный список скинов, ранг и скриншоты — по запросу в чате
+
+    💬 Напишите перед покупкой — подтвердим наличие и ответим на вопросы!
   description_en: ""
   amount: 1
   deactivate_after_sale: true
   active: true
   fields: {}
+
+examples:
+  positive:
+    - "Valorant Immortal, 40 скинов: Reaver, Prime, Elderflame"
+    - "Валорант EU, Radiant, Champions 2021 Vandal, нож Reaver karambit, 5000 VP, родная почта"
+    - "Valorant account episode 1, 60 skins, Glitchpop, Oni, Sovereign, full access"
+  negative:
+    - "Valorant 5 скинов, Bronze 2"
+    - "Valorant Immortal, Reaver — аккаунт забанен"
+    - "Valorant smurf account, unranked, 0 skins, fresh"
+    - "Буст ранга Valorant до Immortal — услуга"
+    - "Valorant Radiant, Champions — сдам в аренду"
+    - "Valorant Reaver, Prime, без привязки к почте"
+    - "Пополнение VP по курсу, Valorant Points"

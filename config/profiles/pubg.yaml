@@ -1,0 +1,160 @@
+# ============================================================================
+#  Профиль поиска: PUBG: Battlegrounds (Steam, AppID 578080) — аккаунты с редкими
+#  сетами, прокачанными скинами и большим количеством часов
+#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml, полный шаблон
+#  со всеми опциями — any_game_cheap_tops.yaml.
+#  ВНИМАНИЕ: это профиль ПК-версии. PUBG Mobile / New State / Lite отсекаются стоп-словами.
+# ============================================================================
+id: pubg
+name: "PUBG (Steam) — редкие сеты и часы"
+game: pubg
+region: null
+enabled: false
+description: >-
+  Steam-аккаунты PUBG: Battlegrounds с редкими сетами (Pajama, Bunny, Trenchcoat,
+  School, Zest), прокачанными скинами (M416 Glacier), высоким рангом и тысячами часов.
+
+sources:
+  funpay:
+    enabled: true
+    subcategory_id: null
+    subcategory_ids: []
+    # На FunPay несколько игр начинаются с «PUBG» (PUBG Mobile, PUBG New State). Подбор идёт
+    # «точное имя -> начало -> подстрока», поэтому надёжнее задать subcategory_id через UI -> «Категории».
+    game_query: "PUBG"
+    subcategory_query: "Аккаунты"
+    server_filter: []
+    extra_query: {}
+    max_items: 500
+  lolz:
+    enabled: true
+    category: steam
+    params:
+      game: [578080]               # документированный параметр game[]: 578080 — AppID PUBG
+      order_by: price_to_up        # документированный параметр
+      # hours_played_min: 1000     # минимум часов — проверьте через Параметры
+      # no_vac: 1                  # без VAC — проверьте через Параметры
+    pages: 3
+    max_items: 500
+
+criteria:
+  price:
+    min: 1500
+    max: 40000
+  # «скины», «инвентарь», «аккаунт» не пишем — есть везде. Только редкие сеты, ранг, часы, старые аккаунты.
+  must_any:
+    - "Pajama => pajama*|пижам*"
+    - "Bunny => bunny|кролик*|зайц*|bunny set"
+    - "Trenchcoat => trenchcoat|тренч*|playerunknown's trenchcoat|плащ playerunknown"
+    - "Bandana => bandana|бандан*|playerunknown's bandana"
+    - "Tracksuit => tracksuit|спортивн* костюм*|спортивка"
+    - "School => school set|school uniform|школьн* форм*|школьн* сет*|school skirt|школьн* юбк*"
+    - "Zest => zest|зест"
+    - "Pleated Mini-skirt => pleated|плиссированн*|мини-юбк*|мини юбк*"
+    - "Gas Mask => gas mask|противогаз*|half gas mask"
+    - "M416 Glacier => glacier|глейшер|глэйшер|ледник*|m416 glacier"
+    - "Progressive => progressive|прогрессив*|прокач* скин*|upgradable|апгрейд* скин*"
+    - "Ранг => conqueror|конкерор|master|мастер|diamond|даймонд|алмаз|top 500|топ 500"
+    - "Много часов => 1000 часов|1500 часов|2000 часов|3000 часов|4000 часов|5000 часов|10000 часов|1000 hours|2000 hours|3000 hours|5000 hours|1к часов|2к часов|3к часов|5к часов"
+    - "Старый аккаунт => с 2017|с 2018|с релиза|с раннего доступа|early access|с беты|2017 год*|2018 год*|old account|старый аккаунт|старый акк|олд акк|ветеран*"
+    - "Survivor Pass => survivor pass|пропуск выживш*|все пропуск*|all passes"
+    - "Дорогой инвентарь => дорог* инвентар*|inventory worth|inventory value|инвентар* стоимост*|стоимост* инвентар*|inv value|инвентар* на|ценн* инвентар*"
+  must_all: []
+  exclude:
+    - "забанен*|заблокирован*|banned|в бане|есть бан|стоит бан|словил бан|получил бан|с баном|пермабан|перма бан|permanent* ban*|perma ban"
+    - "без почты|без доступа к почте|почта не выдается|почта не дается|без привязки почты|без привязки к почте|почта не привязана|no email|without email|no mail access"
+    - "аренда|в аренду|арендовать|прокат|rent|rental|for rent|временн* доступ*|временн* аккаунт*|временное пользование|temporary access"
+    - "только обмен|на обмен|обменяю|меняю на|обмен на|trade only|for trade|swap only"
+    - "буст|бустинг|boost|boosting|boosted|прокачаю|прокачка на заказ|накрутк*|услуг* прокачк*"
+    - "общий аккаунт|общак|shared account|family shar*|фэмили шеринг|семейн* доступ*|семейн* библиотек*|на ваш аккаунт|на ваш акк|оффлайн активац*|offline activation|steam gift|гифт"
+    - "pubg mobile|пубг мобайл|пабг мобайл|mobile|мобайл|pubgm|bgmi|бгми|new state|нью стейт|pubg lite|лайт|lite|metro royale"   # другая игра
+    - "cheat*|чит|читы|читами|читом|hack*|хак|хакнут*|софт|soft|aimbot|аимбот|радар|radar"
+    - "uc по курсу|пополнение|top up|топ ап"
+  regex_any: []
+  regex_exclude:
+    - '(?<!no )(?<!без )(?<!нет )(?<!no-)(vac|вак|game|гейм|игров\w*|battleye|батлай|community)[\s-]*(ban|бан)(?!\w*\s*[:\-–—]?\s*(нет|no|none|отсут|0\b))'
+    - '(есть|стоит|имеется|получен|словил|словлен|with|has)\s+(vac|вак|бан|ban)'
+    - '(vac|вак)\s*[:\-–—]?\s*(есть|да|yes|имеется)'
+    # Голое «VAC» без отрицания рядом («VAC», «есть vac») — тоже отказ; «без VAC», «VAC: нет», «no vac ban» проходят.
+    - '(?<!no )(?<!без )(?<!нет )(?<!no-)(?<!без-)\b(vac|вак)(?!\s*-?\s*(ban|бан)?\w*\s*[:\-–—]?\s*(нет|no|none|отсут|0\b|free|фри|clean|чист))'
+  numeric: []
+  # numeric:
+  #   - {field: pubg_hours, min: 1000}       # проверьте имя поля через attributes["raw_keys"]
+  highlights:
+    - "Pajama => pajama*|пижам*"
+    - "Bunny => bunny|кролик*|зайц*"
+    - "Trenchcoat => trenchcoat|тренч*|плащ playerunknown"
+    - "Bandana => bandana|бандан*"
+    - "Tracksuit => tracksuit|спортивн* костюм*|спортивка"
+    - "School => school set|school uniform|школьн* форм*|школьн* сет*|school skirt|школьн* юбк*"
+    - "Zest => zest|зест"
+    - "Pleated Mini-skirt => pleated|плиссированн*|мини-юбк*|мини юбк*"
+    - "Gas Mask => gas mask|противогаз*|half gas mask"
+    - "M416 Glacier => glacier|глейшер|глэйшер|ледник*|m416 glacier"
+    - "Progressive => progressive|прогрессив*|прокач* скин*|upgradable|апгрейд* скин*"
+    - "Conqueror => conqueror|конкерор"
+    - "Master => master|мастер"
+    - "Diamond => diamond|даймонд|алмаз"
+    - "Много часов => 1000 часов|1500 часов|2000 часов|3000 часов|4000 часов|5000 часов|10000 часов|1000 hours|2000 hours|3000 hours|5000 hours|1к часов|2к часов|3к часов|5к часов"
+    - "Старый аккаунт => с 2017|с 2018|с релиза|с раннего доступа|early access|с беты|2017 год*|2018 год*|old account|старый аккаунт|старый акк|олд акк|ветеран*"
+    - "Survivor Pass => survivor pass|пропуск выживш*|все пропуск*|all passes"
+    - "Дорогой инвентарь => дорог* инвентар*|inventory worth|inventory value|инвентар* стоимост*|стоимост* инвентар*|inv value|инвентар* на|ценн* инвентар*"
+    - "G-Coin => g-coin*|gcoin*|джикоин*|g коин*"
+    - "Первый владелец => первый владелец|first owner|первовлад*"
+    - "Полный доступ => полный доступ|full access|родная почта|native mail|native email|первая почта"
+  regions: []
+  min_score: 1.0
+  seller_min_reviews: null
+
+pricing:
+  mode: formula
+  formula: "price * 2 - 1000"
+  percent: 90.0
+  multiplier: 1.9
+  tiers: []
+  min_margin: 1500
+  round_to: 100
+  round_mode: nearest
+  price_ending: null
+
+lot_template:
+  funpay_subcategory_id: null
+  title_ru: "🍳 {game} Steam | {highlights} | Полный доступ, родная почта"
+  title_en: "🍳 {game} Steam account | {highlights} | Full access"
+  description_ru: |
+    🍳 {game} — аккаунт с редкими сетами
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    📦 Что внутри:
+    {highlights_lines}
+
+    🛡 Гарантии магазина:
+    ✔ Аккаунт проверяется перед передачей: без VAC/BattlEye-банов на момент продажи
+    ✔ Полный доступ к Steam — меняете пароль, почту и Steam Guard на свои
+    ✔ Помогаем с первым входом и сменой данных
+    ✔ Сделка через FunPay — деньги под защитой площадки
+
+    🚚 Доставка:
+    • Выдача данных в чате после оплаты, обычно 10–60 минут
+    • Скриншоты инвентаря, статистики и часов — по запросу в чате
+
+    💬 Напишите перед покупкой — подтвердим наличие и ответим на вопросы!
+  description_en: ""
+  amount: 1
+  deactivate_after_sale: true
+  active: true
+  fields: {}
+
+examples:
+  positive:
+    - "PUBG Steam аккаунт с 2017, Pajama set, Bunny, 3000 часов, без VAC"
+    - "PUBG account: PlayerUnknown's Trenchcoat, School set, M416 Glacier, 2000 hours, no vac ban"
+    - "Пубг стим, Conqueror, инвентарь на 30к, Survivor Pass все сезоны, родная почта"
+  negative:
+    - "PUBG Mobile аккаунт, Conqueror, 500 UC"
+    - "PUBG Steam, Pajama set — есть VAC"
+    - "PUBG Steam 200 часов, стандартные скины"
+    - "PUBG аккаунт Pajama в аренду"
+    - "PUBG Steam, Trenchcoat, читы в подарок, software"
+    - "Steam аккаунт PUBG — семейный доступ, family sharing"
+    - "Буст ранга PUBG до Conqueror — услуга"

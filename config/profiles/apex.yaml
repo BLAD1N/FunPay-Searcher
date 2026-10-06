@@ -1,0 +1,142 @@
+# ============================================================================
+#  Профиль поиска: Apex Legends (EA app / Steam) — аккаунты с реликвиями (Heirloom),
+#  престиж-скинами, высоким рангом и значками
+#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml, полный шаблон
+#  со всеми опциями — any_game_cheap_tops.yaml.
+# ============================================================================
+id: apex
+name: "Apex Legends — Heirloom / Prestige / ранг"
+game: apex
+region: null
+enabled: false
+description: >-
+  Аккаунты Apex Legends (EA / Steam) с реликвиями (Heirloom), престиж-скинами,
+  рангом Master/Predator, значками 20 kills / 4k damage и 500 уровнем.
+
+sources:
+  funpay:
+    enabled: true
+    subcategory_id: null
+    subcategory_ids: []
+    game_query: "Apex Legends"
+    subcategory_query: "Аккаунты"
+    server_filter: []
+    extra_query: {}
+    max_items: 500
+  lolz:
+    enabled: true
+    # На Lolz аккаунты Apex лежат и в категории ea (EA app / Origin), и в steam
+    # (game: [1172470]). Профиль может искать только в одной категории — для Steam-версии
+    # скопируйте профиль с category: steam и params: {game: [1172470]}.
+    category: ea
+    params:
+      order_by: price_to_up        # документированный параметр
+      # game: [...]                # фильтр по игре в категории ea — проверьте через Параметры
+    pages: 3
+    max_items: 500
+
+criteria:
+  price:
+    min: 1500
+    max: 40000
+  must_any:
+    - "Heirloom => heirloom*|хейрлум*|хеирлум*|эйрлум*|реликви*|наследи*|heirloom shards|осколк* реликви*"
+    - "Prestige => prestige*|престиж*|mythic skin*|мифическ* скин*"
+    - "Predator => predator|предатор|предаторск*|apex predator|хищник"
+    - "Master => master|мастер"
+    - "Diamond => diamond|даймонд|алмаз*"
+    - "Значки => 20 kill*|20 kills|20 килл*|20 бомб*|4k badge|4к бейдж*|4000 урона|4000 damage|4k damage|4к урона|badge*|бейдж*"
+    - "Все легенды => все легенды|all legends|все персонаж*|all characters|все леги|фулл легенд*"
+    - "500 уровень => 500 lvl|500 уровн*|500 лвл|level 500|lvl 500|500 level|макс уровень|max level"
+    - "Legendary скины => легендар* скин*|legendary skin*|20 легендар*|30 легендар*|50 легендар*|100 легендар*"
+    - "Collection Event => collection event|коллекционн* событ*|ивент* скин*|event skin*|все ивент*"
+  must_all: []
+  exclude:
+    - "забанен*|заблокирован*|banned|в бане|есть бан|стоит бан|словил бан|получил бан|с баном|пермабан|перма бан|permanent* ban*|perma ban"
+    - "без почты|без доступа к почте|почта не выдается|почта не дается|без привязки почты|без привязки к почте|почта не привязана|no email|without email|no mail access|без ea|без доступа к ea|без origin"
+    - "аренда|в аренду|арендовать|прокат|rent|rental|for rent|временн* доступ*|временн* аккаунт*|временное пользование|temporary access"
+    - "только обмен|на обмен|обменяю|меняю на|обмен на|trade only|for trade|swap only"
+    - "буст|бустинг|boost|boosting|boosted|прокачаю|прокачка на заказ|накрутк*|услуг* прокачк*|badge service|бейджи на заказ"
+    - "общий аккаунт|общак|shared account|family shar*|фэмили шеринг|семейн* доступ*|семейн* библиотек*|на ваш аккаунт|на ваш акк|оффлайн активац*|offline activation|steam gift|гифт"
+    - "apex mobile|мобайл|mobile"
+    - "cheat*|чит|читы|читами|читом|hack*|хак|хакнут*|софт|soft|aimbot|аимбот"
+    - "coins по курсу|apex coins по курсу|пополнение|top up|топ ап"
+    - "смурф*|smurf*|пуст* акк*|fresh account|new account|новый аккаунт|стартов*|starter*"
+  regex_any: []
+  regex_exclude:
+    - '(?<!no )(?<!без )(?<!нет )(?<!no-)(ea|hardware|hwid|хвид|game|гейм|игров\w*)[\s-]*(ban|бан)(?!\w*\s*[:\-–—]?\s*(нет|no|none|отсут|0\b))'
+    - '(есть|стоит|имеется|получен|словил|словлен|with|has)\s+(бан|ban)'
+  numeric: []
+  # numeric:
+  #   - {field: apex_level, min: 300}        # проверьте имя поля через attributes["raw_keys"]
+  highlights:
+    - "Heirloom => heirloom*|хейрлум*|хеирлум*|эйрлум*|реликви*|наследи*|осколк* реликви*"
+    - "Prestige => prestige*|престиж*|mythic skin*|мифическ* скин*"
+    - "Predator => predator|предатор|предаторск*|apex predator|хищник"
+    - "Master => master|мастер"
+    - "Diamond => diamond|даймонд|алмаз*"
+    - "20 kills => 20 kill*|20 kills|20 килл*|20 бомб*"
+    - "4k damage => 4k badge|4к бейдж*|4000 урона|4000 damage|4k damage|4к урона"
+    - "Все легенды => все легенды|all legends|все персонаж*|all characters|все леги|фулл легенд*"
+    - "500 уровень => 500 lvl|500 уровн*|500 лвл|level 500|lvl 500|500 level|макс уровень|max level"
+    - "Legendary скины => легендар* скин*|legendary skin*|20 легендар*|30 легендар*|50 легендар*|100 легендар*"
+    - "Collection Event => collection event|коллекционн* событ*|ивент* скин*|event skin*|все ивент*"
+    - "Battle Pass => battle pass|батл пасс|батлпасс|все бп|all battle pass*"
+    - "Apex Coins => apex coins|апекс коин*|коин*|coins"
+    - "Полный доступ => полный доступ|full access|родная почта|native mail|native email|первая почта"
+  regions: []
+  min_score: 1.0
+  seller_min_reviews: null
+
+pricing:
+  mode: formula
+  formula: "price * 2 - 1000"
+  percent: 90.0
+  multiplier: 1.9
+  tiers: []
+  min_margin: 1500
+  round_to: 100
+  round_mode: nearest
+  price_ending: null
+
+lot_template:
+  funpay_subcategory_id: null
+  title_ru: "🦾 {game} | {highlights} | Полный доступ, смена почты"
+  title_en: "🦾 {game} account | {highlights} | Full access"
+  description_ru: |
+    🦾 {game} — аккаунт с реликвиями и рангом
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    📦 Что внутри:
+    {highlights_lines}
+
+    🛡 Гарантии магазина:
+    ✔ Аккаунт проверяется перед передачей покупателю
+    ✔ Полный доступ к EA — меняете пароль, почту и 2FA на свои
+    ✔ Помогаем с первым входом и сменой данных
+    ✔ Сделка через FunPay — деньги под защитой площадки
+
+    🚚 Доставка:
+    • Выдача данных в чате после оплаты, обычно 10–60 минут
+    • Скриншоты реликвий, значков и ранга — по запросу в чате
+
+    💬 Напишите перед покупкой — подтвердим наличие и ответим на вопросы!
+  description_en: ""
+  amount: 1
+  deactivate_after_sale: true
+  active: true
+  fields: {}
+
+examples:
+  positive:
+    - "Apex Legends: 2 Heirloom (Wraith, Octane), Predator, 500 lvl, 20 kills badge"
+    - "Апекс аккаунт EA, хейрлум Пасфайндера, престиж скин, Master, все легенды, родная почта"
+    - "Apex account Steam, Diamond, 4k damage badge, 40 legendary skins, full access"
+  negative:
+    - "Apex Legends 50 lvl, 3 легенды, стартовый"
+    - "Apex Heirloom, Predator — аккаунт забанен"
+    - "Apex Mobile аккаунт, Master"
+    - "Буст до Predator Apex — услуга, бейджи на заказ"
+    - "Apex Heirloom аккаунт в аренду на неделю"
+    - "Apex 500 lvl, Heirloom, без доступа к EA"
+    - "Apex Coins по курсу, пополнение"

@@ -49,7 +49,7 @@ GAME_NAMES: dict[str, str] = {
     "genshin": "Genshin Impact",
     "valorant": "Valorant",
     "lol": "League of Legends",
-    "pubg": "PUBG",
+    "pubg": "PUBG: Battlegrounds",
     "apex": "Apex Legends",
     "brawl_stars": "Brawl Stars",
     "clash_royale": "Clash Royale",
@@ -57,6 +57,8 @@ GAME_NAMES: dict[str, str] = {
     "roblox": "Roblox",
     "eft": "Escape from Tarkov",
     "warface": "Warface",
+    "steam": "Steam",
+    "any": "Игровой аккаунт",
 }
 
 GAME_SHORT: dict[str, str] = {
@@ -76,6 +78,8 @@ GAME_SHORT: dict[str, str] = {
     "roblox": "Roblox",
     "eft": "Tarkov",
     "warface": "Warface",
+    "steam": "Steam",
+    "any": "Аккаунт",
 }
 
 SOURCE_NAMES: dict[str, str] = {"funpay": "FunPay", "lolz": "Lolzteam"}

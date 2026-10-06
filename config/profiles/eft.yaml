@@ -1,0 +1,138 @@
+# ============================================================================
+#  Профиль поиска: Escape from Tarkov — аккаунты EOD / Unheard с высоким уровнем
+#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml, полный шаблон
+#  со всеми опциями — any_game_cheap_tops.yaml.
+# ============================================================================
+id: eft
+name: "Tarkov — EOD / Unheard, высокий уровень"
+game: eft
+region: null                     # регион аккаунта (RU/EU/...) ограничьте через regions при необходимости
+enabled: false
+description: >-
+  Аккаунты Escape from Tarkov изданий Edge of Darkness / The Unheard Edition,
+  с высоким уровнем, Каппой, максимальными торговцами и убежищем.
+
+sources:
+  funpay:
+    enabled: true
+    subcategory_id: null
+    subcategory_ids: []
+    game_query: "Escape from Tarkov"
+    subcategory_query: "Аккаунты"
+    server_filter: []
+    extra_query: {}
+    max_items: 500
+  lolz:
+    enabled: true
+    category: escape-from-tarkov
+    params:
+      order_by: price_to_up        # документированный параметр
+      # edition: eod               # издание — проверьте через Параметры
+      # level_min: 30              # минимальный уровень — проверьте через Параметры
+      # region: ru                 # регион — проверьте через Параметры
+    pages: 3
+    max_items: 500
+
+criteria:
+  price:
+    min: 1500
+    max: 40000
+  # Слово «ключ» в exclude НЕ пишем: в Тарков ключи — ценные предметы (ключи от общаги и т.п.).
+  must_any:
+    - "EOD => eod|edge of darkness|edge|эдж|край тьмы|еод|иод|eod edition|издание eod"
+    - "Unheard => unheard|анхерд|анхёрд|the unheard edition|unheard edition|неслыханн*"
+    - "Prepare for Escape => prepare for escape|pfe|препейр|подготовка к побегу"
+    - "Kappa => kappa|каппа|контейнер каппа|kappa container"
+    - "Lightkeeper => lightkeeper|лайткипер|смотритель маяка|хранитель маяка"
+    - "Макс торговцы => макс* торговц*|max traders|все торговц*|трейдеры макс|все трейдеры|lvl 4 traders|4 уровн* торговц*|торговцы 4|торговцы макс|max loyalty"
+    - "Макс убежище => схрон макс|max hideout|макс схрон|убежище макс|hideout max|макс убежищ*|фулл убежищ*|полное убежище|full hideout|максимальное убежище"
+    - "Уровень => 40 lvl|45 lvl|50 lvl|55 lvl|60 lvl|65 lvl|70 lvl|40 лвл|45 лвл|50 лвл|55 лвл|60 лвл|65 лвл|70 лвл|40 уровн*|45 уровн*|50 уровн*|55 уровн*|60 уровн*|65 уровн*|70 уровн*|level 40|level 45|level 50|level 55|level 60|lvl 40|lvl 45|lvl 50|lvl 55|lvl 60"
+    - "Рубли в игре => млн руб*|миллион* руб*|лямов|лям|ляма|миллиард*|billion*|million rouble*|million roubles|млн рублей|100 млн|200 млн|500 млн"
+    - "Ветеран => с 2016|с 2017|с 2018|альфа|alpha|с беты|cbt|closed beta|beta tester|2016 год*|2017 год*|2018 год*|старый аккаунт|старый акк|олд акк|old account"
+  must_all: []
+  exclude:
+    - "забанен*|заблокирован*|banned|в бане|есть бан|стоит бан|словил бан|получил бан|с баном|пермабан|перма бан|permanent* ban*|perma ban|battleye ban|бан battleye"
+    - "без почты|без доступа к почте|почта не выдается|почта не дается|без привязки почты|без привязки к почте|почта не привязана|no email|without email|no mail access|без доступа к bsg|bsg не выда*"
+    - "аренда|в аренду|арендовать|прокат|rent|rental|for rent|временн* доступ*|временн* аккаунт*|временное пользование|temporary access"
+    - "только обмен|на обмен|обменяю|меняю на|обмен на|trade only|for trade|swap only"
+    - "буст|бустинг|boost|boosting|boosted|прокачаю|прокачка на заказ|накрутк*|услуг* прокачк*|карри|carry|прохождение квестов|квесты на заказ|каппа на заказ"
+    - "ключ активации|activation key|game key|ключ игры|код активации|предзаказ|pre-order|preorder|апгрейд|upgrade|улучшение до|улучшение версии|апгрейд до"   # продажа ключей/апгрейдов, а не аккаунтов
+    - "arena breakout|арена брейкаут|tarkov arena only|только арена"   # другая игра / только Арена
+    - "cheat*|чит|читы|читами|читом|hack*|хак|хакнут*|взлом*|софт|радар|radar|esp"
+    - "рубли по курсу|рублей по курсу|продам рубли|внутриигров* валют* по курсу|пополнение"   # продажа валюты
+  regex_any: []
+  regex_exclude:
+    - '(есть|стоит|имеется|получен|словил|словлен|with|has)\s+(бан|ban)'
+  numeric: []
+  # numeric:
+  #   - {field: level, min: 30}           # проверьте имя поля через attributes["raw_keys"]
+  highlights:
+    - "EOD => eod|edge of darkness|edge|эдж|край тьмы|еод|иод|eod edition|издание eod"
+    - "Unheard => unheard|анхерд|анхёрд|the unheard edition|unheard edition|неслыханн*"
+    - "Prepare for Escape => prepare for escape|pfe|препейр|подготовка к побегу"
+    - "Kappa => kappa|каппа|контейнер каппа|kappa container"
+    - "Lightkeeper => lightkeeper|лайткипер|смотритель маяка|хранитель маяка"
+    - "Макс торговцы => макс* торговц*|max traders|все торговц*|трейдеры макс|все трейдеры|lvl 4 traders|4 уровн* торговц*|торговцы 4|торговцы макс|max loyalty"
+    - "Макс убежище => схрон макс|max hideout|макс схрон|убежище макс|hideout max|макс убежищ*|фулл убежищ*|полное убежище|full hideout|максимальное убежище"
+    - "Высокий уровень => 40 lvl|45 lvl|50 lvl|55 lvl|60 lvl|65 lvl|70 lvl|40 лвл|45 лвл|50 лвл|55 лвл|60 лвл|65 лвл|70 лвл|40 уровн*|45 уровн*|50 уровн*|55 уровн*|60 уровн*|65 уровн*|70 уровн*|level 40|level 45|level 50|level 55|level 60|lvl 40|lvl 45|lvl 50|lvl 55|lvl 60"
+    - "Рубли в игре => млн руб*|миллион* руб*|лямов|лям|ляма|миллиард*|billion*|million rouble*|million roubles|млн рублей|100 млн|200 млн|500 млн"
+    - "Ветеран => с 2016|с 2017|с 2018|альфа|alpha|с беты|cbt|closed beta|beta tester|2016 год*|2017 год*|2018 год*|старый аккаунт|старый акк|олд акк|old account"
+    - "Arena => arena|арена|tarkov arena"
+    - "Полный доступ => полный доступ|full access|родная почта|native mail|native email|первая почта"
+  regions: []
+  min_score: 1.0
+  seller_min_reviews: null
+
+pricing:
+  mode: formula
+  formula: "price * 2 - 1000"
+  percent: 90.0
+  multiplier: 1.9
+  tiers: []
+  min_margin: 1500
+  round_to: 100
+  round_mode: nearest
+  price_ending: null
+
+lot_template:
+  funpay_subcategory_id: null
+  title_ru: "🎒 {game} | {highlights} | Полный доступ, смена почты"
+  title_en: "🎒 {game} account | {highlights} | Full access"
+  description_ru: |
+    🎒 {game} — аккаунт с премиум-изданием
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    📦 Что внутри:
+    {highlights_lines}
+
+    🛡 Гарантии магазина:
+    ✔ Аккаунт проверяется перед передачей покупателю
+    ✔ Полный доступ к профилю BSG — меняете пароль и почту на свои
+    ✔ Помогаем с первым входом и сменой данных
+    ✔ Сделка через FunPay — деньги под защитой площадки
+
+    🚚 Доставка:
+    • Регион: {region}
+    • Выдача данных в чате после оплаты, обычно 10–60 минут
+    • Скриншоты профиля, схрона и уровня — по запросу в чате
+
+    💬 Напишите перед покупкой — подтвердим наличие и ответим на вопросы!
+  description_en: ""
+  amount: 1
+  deactivate_after_sale: true
+  active: true
+  fields: {}
+
+examples:
+  positive:
+    - "Escape from Tarkov EOD, 55 lvl, Каппа, макс торговцы, 300 млн рублей"
+    - "Тарков The Unheard Edition, 42 лвл, убежище макс, родная почта, ключи от общаги"
+    - "EFT account Edge of Darkness, level 60, Lightkeeper, max hideout, since 2017"
+  negative:
+    - "Escape from Tarkov Standard edition, 15 lvl"
+    - "Tarkov EOD, 50 lvl — аккаунт забанен BattlEye"
+    - "Ключ активации Escape from Tarkov EOD, предзаказ"
+    - "Апгрейд до Unheard Edition — услуга"
+    - "Tarkov EOD аккаунт в аренду на вайп"
+    - "Tarkov EOD 60 lvl, софт, радар в комплекте"
+    - "EFT Unheard, Каппа, без доступа к почте"

@@ -1,0 +1,138 @@
+# ============================================================================
+#  Профиль поиска: Standoff 2 — аккаунты с голдой, ножами и званием «Легенда»
+#  Только FunPay: на Lolzteam Market отдельной категории Standoff 2 нет.
+#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml, полный шаблон
+#  со всеми опциями — any_game_cheap_tops.yaml.
+# ============================================================================
+id: standoff2
+name: "Standoff 2 — голда, ножи, Легенда"
+game: standoff2
+region: null
+enabled: false
+description: >-
+  Аккаунты Standoff 2 с запасом голды (10k+), ножами (бабочка, керамбит, M9, Fang...),
+  перчатками, редкими скинами и званием Легенда/Феникс. Источник — только FunPay.
+
+sources:
+  funpay:
+    enabled: true
+    subcategory_id: null
+    subcategory_ids: []
+    game_query: "Standoff 2"
+    subcategory_query: "Аккаунты"
+    server_filter: []
+    extra_query: {}
+    max_items: 500
+  lolz:
+    enabled: false                 # на Lolz нет категории Standoff 2 — источник выключен
+    category: null
+    params: {}
+    pages: 3
+    max_items: 500
+
+criteria:
+  price:
+    min: 500
+    max: 30000
+  # «скины», «аккаунт», «инвентарь» не пишем. Ценность SO2 — голда, ножи, перчатки, звание.
+  must_any:
+    - "Голда => голд*|gold|золот*"
+    - "Нож => нож*|knife|knives|бабочка|butterfly|керамбит|karambit|m9|м9|байонет|bayonet|flip|флип|скелет*|skeleton|fang|фанг|танто|tanto|scorpion|скорпион|dual|дуал*|stiletto|стилет*|kunai|кунай|shadow|шадоу|scyrus|сцирус|тычков*|kukri|кукри|нунчаки|nunchaku"
+    - "Перчатки => перчатк*|gloves"
+    - "Легенда => легенда|легенд* звани*|legend|legend rank|феникс|phoenix|элит*|elite|мастер|master"
+    - "Редкие скины => редк* скин*|rare skin*|легендар* скин*|legendary skin*|арканы|arcana|дорог* скин*|expensive skin*|дорог* инвентар*|инвентар* на|инвентар* стоимост*|stickers|стикер*|наклейк*"
+    - "Battle Pass => battle pass|батл пасс|батлпасс|все бп|all battle pass*"
+  must_all: []
+  exclude:
+    - "забанен*|заблокирован*|banned|в бане|есть бан|стоит бан|словил бан|получил бан|с баном|пермабан|перма бан|permanent* ban*|perma ban"
+    - "без почты|без доступа к почте|почта не выдается|почта не дается|без привязки почты|без привязки к почте|почта не привязана|no email|without email|no mail access|без гугл|без google|без доступа к google|без apple id"
+    - "аренда|в аренду|арендовать|прокат|rent|rental|for rent|временн* доступ*|временн* аккаунт*|временное пользование|temporary access"
+    - "только обмен|на обмен|обменяю|меняю на|обмен на|trade only|for trade|swap only"
+    - "буст|бустинг|boost|boosting|boosted|прокачаю|прокачка на заказ|накрутк*|услуг* прокачк*|подниму звание|звание на заказ"
+    - "голда по курсу|голд по курсу|продам голд*|голда дешево|пополнение|top up|топ ап|donate|донат по курсу"   # продажа валюты, а не аккаунта
+    - "cheat*|чит|читы|читами|читом|hack*|хак|хакнут*|софт|приват* сервер*|private server"
+  # Хотя бы одно: количество голды от 10 000 («15к голды», «20 000 gold», «голда: 12k»).
+  regex_any:
+    - '(?<!\d)(\d{2,3})\s*(k|к|тыс\.?)\s*\+?\s*(gold|голд\w*|золот\w*)'
+    - '(?<!\d)(\d{2,3}[ .,]\d{3}|\d{5,6})\s*\+?\s*(gold|голд\w*|золот\w*)'
+    - '(gold|голд\w*|золот\w*)\s*[:\-–—]?\s*(\d{2,3}\s*(k|к|тыс)|\d{2,3}[ .,]\d{3}|\d{5,6})'
+    - 'нож|knife|бабочк|butterfly|керамбит|karambit|перчатк|gloves|легенда|legend|феникс|phoenix'   # ножи/перчатки/звание — тоже достаточно
+  regex_exclude: []
+  numeric: []
+  highlights:
+    - "Голда => голд*|gold|золот*"
+    - "Бабочка => бабочка|butterfly"
+    - "Керамбит => керамбит|karambit"
+    - "M9 => m9|м9|байонет|bayonet"
+    - "Fang => fang|фанг"
+    - "Скорпион => scorpion|скорпион"
+    - "Танто => танто|tanto"
+    - "Кунай => kunai|кунай"
+    - "Нож => нож*|knife|knives|flip|флип|скелет*|skeleton|dual|дуал*|stiletto|стилет*|shadow|шадоу|scyrus|сцирус|тычков*|kukri|кукри"
+    - "Перчатки => перчатк*|gloves"
+    - "Легенда => легенда|легенд* звани*|legend|legend rank"
+    - "Феникс => феникс|phoenix"
+    - "Элита => элит*|elite"
+    - "Редкие скины => редк* скин*|rare skin*|легендар* скин*|legendary skin*|арканы|arcana|дорог* скин*|expensive skin*"
+    - "Стикеры => stickers|стикер*|наклейк*"
+    - "Battle Pass => battle pass|батл пасс|батлпасс|все бп|all battle pass*"
+    - "Старый аккаунт => с 2017|с 2018|с 2019|2017 год*|2018 год*|старый аккаунт|старый акк|олд акк|old account|с релиза"
+    - "Полный доступ => полный доступ|full access|родная почта|native mail|native email|первая почта|с гуглом|google привязан*"
+  regions: []
+  min_score: 1.0
+  seller_min_reviews: null
+
+pricing:
+  mode: tiers
+  formula: "price * 2 - 1000"
+  percent: 80.0
+  multiplier: 1.9
+  tiers:
+    - {up_to: 2000, percent: 150}
+    - {up_to: 10000, percent: 100}
+    - {up_to: 30000, percent: 80}
+  min_margin: 500
+  round_to: 50
+  round_mode: nearest
+  price_ending: null
+
+lot_template:
+  funpay_subcategory_id: null
+  title_ru: "🔪 {game} | {highlights} | Полный доступ, смена почты"
+  title_en: "🔪 {game} account | {highlights} | Full access"
+  description_ru: |
+    🔪 {game} — аккаунт с голдой и ножами
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    📦 Что внутри:
+    {highlights_lines}
+
+    🛡 Гарантии магазина:
+    ✔ Аккаунт проверяется перед передачей покупателю
+    ✔ Полный доступ — меняете пароль и привязываете свою почту (Google/Apple ID)
+    ✔ Помогаем с первым входом и сменой данных
+    ✔ Сделка через FunPay — деньги под защитой площадки
+
+    🚚 Доставка:
+    • Выдача данных в чате после оплаты, обычно 10–60 минут
+    • Скриншоты инвентаря и звания — по запросу в чате
+
+    💬 Напишите перед покупкой — подтвердим наличие и ответим на вопросы!
+  description_en: ""
+  amount: 1
+  deactivate_after_sale: true
+  active: true
+  fields: {}
+
+examples:
+  positive:
+    - "Standoff 2: 25к голды, нож бабочка, перчатки, звание Легенда"
+    - "Стандофф 2 аккаунт, 12 000 gold, керамбит, M9, Феникс, родная почта"
+    - "Standoff 2 account, Fang knife, gloves, legend rank, 15k gold"
+  negative:
+    - "Standoff 2 аккаунт 500 голды, звание Бронза"
+    - "Standoff 2 нож бабочка, 20к голды — аккаунт забанен"
+    - "Продам голду Standoff 2 по курсу, 1000 gold дешево"
+    - "Standoff 2 Легенда аккаунт в аренду"
+    - "Подниму звание Standoff 2 до Легенды — буст"
+    - "Standoff 2 нож, 30к голды, без доступа к Google"

@@ -1,6 +1,7 @@
 # ============================================================================
-#  Профиль поиска: Dota 2 — аккаунты с высоким MMR
-#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml.
+#  Профиль поиска: Dota 2 — аккаунты с высоким MMR (6000+)
+#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml, полный шаблон
+#  со всеми опциями — any_game_cheap_tops.yaml.
 # ============================================================================
 id: dota2_high_mmr
 name: "Dota 2 — высокий MMR (6000+)"
@@ -8,7 +9,8 @@ game: dota2
 region: null                     # Dota 2 — регион не важен
 enabled: true
 description: >-
-  Steam-аккаунты с Dota 2: рейтинг 6000+ MMR, Immortal/Divine, редкие Arcana.
+  Steam-аккаунты с Dota 2: рейтинг 6000+ MMR (Divine/Immortal), редкие Arcana
+  (Dragonclaw Hook, Golden), прокачанный Battle Pass.
 
 sources:
   funpay:
@@ -23,14 +25,11 @@ sources:
   lolz:
     enabled: true
     category: steam
-    # Имена параметров Steam-категории (game, dota2_solo_mmr_min и т.п.) обязательно
-    # проверьте в UI -> «Lolz» -> «Параметры» для категории steam — они могут отличаться.
     params:
-      game: [570]                  # 570 — AppID Dota 2 (ищем аккаунты с этой игрой)
-      order_by: price_to_up
-      dota2_solo_mmr_min: 6000     # минимальный рейтинг (имя параметра — см. выше)
-      # pmin: 3000
-      # pmax: 80000
+      game: [570]                  # документированный параметр game[]: 570 — AppID Dota 2
+      order_by: price_to_up        # документированный параметр
+      # dota2_solo_mmr_min: 6000   # минимальный рейтинг — проверьте через Параметры
+      # no_vac: 1                  # без VAC — проверьте через Параметры
     pages: 3
     max_items: 500
 
@@ -38,39 +37,60 @@ criteria:
   price:
     min: 2000
     max: 80000
+  # «рейтинг|rating» и «инвентарь» убраны — слишком общие (есть в любом объявлении).
   must_any:
-    - "MMR => mmr|ммр|мммр|рейтинг|rating"
+    - "MMR => mmr|ммр|мммр"
     - "Immortal => immortal|имморт*|бессмерт*"
     - "Divine => divine|дивайн|божеств*"
     - "Arcana => аркан*|arcana*"
-    - "Titan => titan|титан"
+    - "Dragonclaw Hook => dragonclaw|драгонклав|драгон клав|dragon claw|коготь дракона"
+    - "Golden => golden|голден|золот* аркан*|золот* иммортал*|golden baby roshan|золот* рошан*"
+    - "Battle Pass => battle pass|батл пасс|батлпасс|compendium|компендиум|бп 1000|бп 2000|level 1000|1000 lvl"
+    - "Leaderboard => leaderboard|лидерборд|top 1000|топ 1000|топ-1000|top 100|топ 100|топ-100"
+    - "Часы => 5000 часов|6000 часов|7000 часов|8000 часов|10000 часов|5000 hours|6000 hours|8000 hours|10000 hours|5к часов|10к часов"
   must_all: []
   exclude:
-    - "бан|ban|banned|забанен*|заблокирован*|vac"
-    - "без почты|без доступа к почте|no email"
-    - "буст*|boost*|калибровк*|calibration"       # услуги буста, а не аккаунты
-    - "обмен|только обмен|trade only"
-    - "low prior*|лоу прайор*|лп|лоу приор*"
-  # Хотя бы одно: в тексте должен быть числовой MMR от 1000 (4–5 цифр) рядом со словом mmr/ммр.
+    - "забанен*|заблокирован*|banned|в бане|есть бан|стоит бан|словил бан|получил бан|с баном|пермабан|перма бан|permanent* ban*|perma ban"
+    - "без почты|без доступа к почте|почта не выдается|почта не дается|без привязки почты|без привязки к почте|почта не привязана|no email|without email|no mail access"
+    - "аренда|в аренду|арендовать|прокат|rent|rental|for rent|временн* доступ*|временн* аккаунт*|временное пользование|temporary access"
+    - "только обмен|на обмен|обменяю|меняю на|обмен на|trade only|for trade|swap only"
+    - "буст|бустинг|boost|boosting|boosted|калибровк*|calibration|calibrated by|откалибрую|прокачаю|услуг*|накрутк*"
+    # не продажа аккаунта: общий/семейный доступ, игра «на ваш аккаунт», гифты (слово «ключи» не пишем — это ключи от кейсов)
+    - "общий аккаунт|общак|shared account|family shar*|фэмили шеринг|семейн* доступ*|семейн* библиотек*|на ваш аккаунт|на ваш акк|оффлайн активац*|offline activation|steam gift|гифт"
+    - "low priority|лоу приор*|лоу прайор*|в лп|есть лп|с лп"
+    - "смурф*|smurf*|стартов*|starter*|пуст* акк*|новый аккаунт|new account|fresh account"
+  # Хотя бы одно: числовой MMR от 6000 рядом со словом mmr/ммр (6500 mmr, mmr: 7200, 6.5k mmr, ммр 7к).
   regex_any:
-    - "(?<!\\d)(\\d{4,5})\\s*(\\+)?\\s*(mmr|ммр)"
-    - "(mmr|ммр)\\s*[:\\-–—]?\\s*(\\d{4,5})"
-  regex_exclude: []
+    - '(?<!\d)([6-9]\d{3}|1\d{4})\s*\+?\s*(mmr|ммр)'
+    - '(mmr|ммр)\s*[:\-–—]?\s*([6-9]\d{3}|1\d{4})(?!\d)'
+    - '(?<!\d)([6-9](?:[.,]\d)?|1\d(?:[.,]\d)?)\s*(k|к)\s*\+?\s*(mmr|ммр)'
+    - '(mmr|ммр)\s*[:\-–—]?\s*([6-9](?:[.,]\d)?|1\d(?:[.,]\d)?)\s*(k|к)(?!\w)'
+  # Наличие VAC/игрового бана (с отрицаниями «без/нет/no» — пропускаем).
+  regex_exclude:
+    - '(?<!no )(?<!без )(?<!нет )(?<!no-)(vac|вак|game|гейм|игров\w*|community)[\s-]*(ban|бан)(?!\w*\s*[:\-–—]?\s*(нет|no|none|отсут|0\b))'
+    - '(есть|стоит|имеется|получен|словил|словлен|with|has)\s+(vac|вак|бан|ban)'
+    - '(vac|вак)\s*[:\-–—]?\s*(есть|да|yes|имеется)'
+    # Голое «VAC» без отрицания рядом («VAC», «есть vac») — тоже отказ; «без VAC», «VAC: нет», «no vac ban» проходят.
+    - '(?<!no )(?<!без )(?<!нет )(?<!no-)(?<!без-)\b(vac|вак)(?!\s*-?\s*(ban|бан)?\w*\s*[:\-–—]?\s*(нет|no|none|отсут|0\b|free|фри|clean|чист))'
   # Если источник отдаёт MMR отдельным полем (например, dota2_solo_mmr у Lolz) —
   # можно отфильтровать точнее. Отсутствующее поле объявление не отклоняет.
   numeric: []
   # numeric:
-  #   - {field: dota2_solo_mmr, min: 6000}
+  #   - {field: dota2_solo_mmr, min: 6000}      # проверьте имя поля через attributes["raw_keys"]
   highlights:
     - "Immortal => immortal|имморт*|бессмерт*"
     - "Divine => divine|дивайн"
+    - "Leaderboard => leaderboard|лидерборд|top 1000|топ 1000|топ-1000|top 100|топ 100|топ-100"
     - "Arcana => аркан*|arcana*"
-    - "Titan => titan|титан"
-    - "Battle Pass => battle pass|батл пасс|батлпасс|бп"
+    - "Dragonclaw Hook => dragonclaw|драгонклав|драгон клав|dragon claw|коготь дракона"
+    - "Golden => golden|голден|золот* аркан*|золот* иммортал*|золот* рошан*"
+    - "Baby Roshan => baby roshan|бейби рошан|рошан*"
+    - "Battle Pass => battle pass|батл пасс|батлпасс|compendium|компендиум"
+    - "Collector's Cache => collector's cache|collectors cache|коллекционн* кеш|кеш коллекционера"
     - "Dota Plus => dota plus|дота плюс"
-    - "Prime => prime|прайм"
+    - "Много часов => 5000 часов|6000 часов|7000 часов|8000 часов|10000 часов|5000 hours|6000 hours|8000 hours|10000 hours|5к часов|10к часов"
     - "Первый владелец => первый владелец|first owner|первовлад*"
-    - "Родная почта => родная почта|native mail|native email|полный доступ|full access"
+    - "Полный доступ => полный доступ|full access|родная почта|native mail|native email|первая почта"
   regions: []
   min_score: 1.0
   seller_min_reviews: null
@@ -88,11 +108,43 @@ pricing:
 
 lot_template:
   funpay_subcategory_id: null
-  title_ru: ""
-  title_en: ""
-  description_ru: ""
+  title_ru: "🎯 {game} | {highlights} | Родная почта, полный доступ"
+  title_en: "🎯 {game} account | {highlights} | Original e-mail, full access"
+  description_ru: |
+    🎯 {game} — аккаунт с высоким рейтингом
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    📦 Что внутри:
+    {highlights_lines}
+
+    🛡 Гарантии магазина:
+    ✔ Аккаунт проверяется перед передачей покупателю
+    ✔ Полный доступ к Steam — меняете пароль, почту и Steam Guard на свои
+    ✔ Помогаем с первым входом и сменой данных
+    ✔ Сделка через FunPay — деньги под защитой площадки
+
+    🚚 Доставка:
+    • Выдача данных в чате после оплаты, обычно 10–60 минут
+    • Точный MMR, инвентарь и история аккаунта — по запросу в чате
+
+    💬 Напишите перед покупкой — подтвердим наличие и ответим на вопросы!
   description_en: ""
   amount: 1
   deactivate_after_sale: true
   active: true
   fields: {}
+
+examples:
+  positive:
+    - "Dota 2, 7200 MMR, Immortal, аркана Dragonclaw Hook"
+    - "Dota 2, ммр: 6500, divine, без VAC, родная почта"
+    - "Dota 2 account 8.5k mmr immortal, top 1000 leaderboard, golden arcana"
+    - "Дота 2 6,5к ммр, battle pass 1500 lvl, 9000 часов, no vac ban"
+  negative:
+    - "Dota 2, Immortal, аркана"                         # нет числового MMR
+    - "Dota 2, 7200 MMR, есть VAC"
+    - "Dota 2, 7200 MMR, Immortal, vac ban"
+    - "Dota 2, 4500 MMR, Ancient, аркана"                # MMR ниже 6000
+    - "Калибровка и буст MMR до 7000 — услуга"
+    - "Dota 2 7000 mmr immortal — сдам в аренду на неделю"
+    - "Dota 2, 6500 mmr, аккаунт на вашу почту не переводится, без почты"

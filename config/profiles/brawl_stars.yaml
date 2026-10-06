@@ -1,0 +1,155 @@
+# ============================================================================
+#  Профиль поиска: Brawl Stars (Supercell) — аккаунты с кубками 10k+, легендарками
+#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml, полный шаблон
+#  со всеми опциями — any_game_cheap_tops.yaml.
+# ============================================================================
+id: brawl_stars
+name: "Brawl Stars — 10k+ кубков и легендарки"
+game: brawl_stars
+region: null
+enabled: false
+description: >-
+  Аккаунты Brawl Stars с 10 000+ кубков, легендарными бравлерами (Спайк, Ворон, Леон,
+  Сэнди, Амбер, Мег, Честер...), гиперзарядами и редкими скинами. Передача через Supercell ID.
+
+sources:
+  funpay:
+    enabled: true
+    subcategory_id: null
+    subcategory_ids: []
+    game_query: "Brawl Stars"
+    subcategory_query: "Аккаунты"
+    server_filter: []
+    extra_query: {}
+    max_items: 500
+  lolz:
+    enabled: true
+    category: supercell            # общая категория Supercell (Brawl Stars / Clash Royale / Clash of Clans)
+    params:
+      order_by: price_to_up        # документированный параметр
+      # system: laser              # laser = Brawl Stars — проверьте через Параметры
+      # trophies_min: 10000        # минимум кубков — проверьте через Параметры
+    pages: 3
+    max_items: 500
+
+criteria:
+  price:
+    min: 500
+    max: 30000
+  must_any:
+    - "Кубки => кубк*|трофе*|trophies|cups"
+    - "Легендарные => легендар*|legendary|леги|все леги|all legendar*"
+    - "Все бравлеры => все бравлер*|all brawlers|все персонаж*|все бойц*|фулл бравлер*"
+    - "Spike => spike|спайк"
+    - "Crow => crow|ворон"
+    - "Leon => leon|леон"
+    - "Sandy => sandy|сэнди|сенди"
+    - "Amber => amber|амбер|эмбер"
+    - "Meg => meg|мег"
+    - "Chester => chester|честер"
+    - "Surge => surge|вольт"
+    - "Kit => kit|кит"
+    - "Draco => draco|драко"
+    - "Kenji => kenji|кэндзи|кенджи|кендзи"
+    - "Гиперзаряды => гиперзаряд*|hypercharge*|все гипер*|all hypercharges"
+    - "Ранг => ранг 35|rank 35|ранг 30|rank 30|мастер*|masters|легенд* ранг*|legendary rank|pro ranked|про ранг*"
+  must_all: []
+  exclude:
+    - "забанен*|заблокирован*|banned|в бане|есть бан|стоит бан|словил бан|получил бан|с баном|пермабан|перма бан|permanent* ban*|perma ban"
+    - "без почты|без доступа к почте|почта не выдается|почта не дается|без привязки почты|без привязки к почте|почта не привязана|no email|without email|no mail access"
+    - "без supercell id|без суперселл айди|без sc id|без сц айди|supercell id не выда*|без доступа к supercell|без суперселл|no supercell id"
+    - "аренда|в аренду|арендовать|прокат|rent|rental|for rent|временн* доступ*|временн* аккаунт*|временное пользование|temporary access"
+    - "только обмен|на обмен|обменяю|меняю на|обмен на|trade only|for trade|swap only"
+    - "буст|бустинг|boost|boosting|boosted|прокачаю|прокачка на заказ|накрутк*|услуг* прокачк*|подниму кубк*|кубки на заказ|trophy push service"
+    - "гемы по курсу|гемов по курсу|пополнение|донат по курсу|top up|топ ап|бравл пасс по курсу"
+    - "cheat*|чит|читы|читами|читом|hack*|хак|хакнут*|софт|приват* сервер*|private server|null's brawl|nulls brawl"
+  # Хотя бы одно: число кубков от 10 000 («35к кубков», «12 000 трофеев», «20k trophies», «40.000 🏆»).
+  regex_any:
+    - '(?<!\d)(\d{2,3})\s*(k|к|тыс\.?)\s*\+?\s*(кубк|трофе|trophies|trophy|cups|🏆)'
+    - '(?<!\d)(\d{2,3}[ .,]\d{3}|\d{5,6})\s*\+?\s*(кубк|трофе|trophies|trophy|cups|🏆)'
+    - '(кубк\w*|трофе\w*|trophies|🏆)\s*[:\-–—]?\s*(\d{2,3}\s*(k|к|тыс)|\d{2,3}[ .,]\d{3}|\d{5,6})'
+  regex_exclude: []
+  numeric: []
+  # numeric:
+  #   - {field: trophies, min: 10000}     # проверьте имя поля через attributes["raw_keys"]
+  highlights:
+    - "Все бравлеры => все бравлер*|all brawlers|все персонаж*|все бойц*|фулл бравлер*"
+    - "Легендарные => все леги|all legendar*|легендар*|legendary"
+    - "Spike => spike|спайк"
+    - "Crow => crow|ворон"
+    - "Leon => leon|леон"
+    - "Sandy => sandy|сэнди|сенди"
+    - "Amber => amber|амбер|эмбер"
+    - "Meg => meg|мег"
+    - "Chester => chester|честер"
+    - "Surge => surge|вольт"
+    - "Kit => kit|кит"
+    - "Draco => draco|драко"
+    - "Kenji => kenji|кэндзи|кенджи|кендзи"
+    - "Гиперзаряды => гиперзаряд*|hypercharge*|все гипер*|all hypercharges"
+    - "Ранг 35 => ранг 35|rank 35|мастер*|masters|легенд* ранг*|legendary rank|pro ranked|про ранг*"
+    - "Редкие скины => редк* скин*|rare skin*|легендар* скин*|legendary skin*|скин* за 299|299 гем*|скины за гемы"
+    - "Brawl Pass => brawl pass|бравл пасс|бравлпасс|pass plus|пасс плюс"
+    - "Гемы => гемы|гемов|гем|gems|кристалл*"
+    - "Старый аккаунт => с 2017|с 2018|с 2019|2017 год*|2018 год*|старый аккаунт|старый акк|олд акк|old account|с релиза|с глобального релиза"
+    - "Supercell ID => supercell id|суперселл айди|сц айди|sc id"
+  regions: []
+  min_score: 1.0
+  seller_min_reviews: null
+
+pricing:
+  # Ступени: дешёвые аккаунты — наценка больше в процентах, дорогие — меньше.
+  mode: tiers
+  formula: "price * 2 - 1000"
+  percent: 80.0                 # ступень по умолчанию (выше последней up_to)
+  multiplier: 1.9
+  tiers:
+    - {up_to: 2000, percent: 150}
+    - {up_to: 10000, percent: 100}
+    - {up_to: 30000, percent: 80}
+  min_margin: 500
+  round_to: 50
+  round_mode: nearest
+  price_ending: null
+
+lot_template:
+  funpay_subcategory_id: null
+  title_ru: "⭐ {game} | {highlights} | Supercell ID, полный доступ"
+  title_en: "⭐ {game} account | {highlights} | Supercell ID, full access"
+  description_ru: |
+    ⭐ {game} — прокачанный аккаунт
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    📦 Что внутри:
+    {highlights_lines}
+
+    🛡 Гарантии магазина:
+    ✔ Аккаунт проверяется перед передачей покупателю
+    ✔ Передача через Supercell ID — привязываете свою почту
+    ✔ Помогаем с первым входом и сменой данных
+    ✔ Сделка через FunPay — деньги под защитой площадки
+
+    🚚 Доставка:
+    • Выдача данных в чате после оплаты, обычно 10–60 минут
+    • Скриншоты профиля, бравлеров и скинов — по запросу в чате
+
+    💬 Напишите перед покупкой — подтвердим наличие и ответим на вопросы!
+  description_en: ""
+  amount: 1
+  deactivate_after_sale: true
+  active: true
+  fields: {}
+
+examples:
+  positive:
+    - "Brawl Stars 35к кубков, все бравлеры, Спайк, Ворон, Леон, 10 гиперзарядов"
+    - "Бравл Старс аккаунт 12 000 кубков, все легендарки, Supercell ID, ранг 35"
+    - "Brawl Stars account 50k trophies, all brawlers, Kit, Draco, Kenji, legendary skins"
+  negative:
+    - "Brawl Stars 3000 кубков, 20 бравлеров"
+    - "Brawl Stars 40к кубков, Спайк — аккаунт забанен"
+    - "Brawl Stars 30к кубков, все леги, без Supercell ID"
+    - "Подниму кубки Brawl Stars — услуга, буст"
+    - "Brawl Stars 25k trophies account for rent"
+    - "Гемы Brawl Stars по курсу, пополнение 170 гемов"
+    - "Null's Brawl приватный сервер аккаунт 100к кубков, все бравлеры"

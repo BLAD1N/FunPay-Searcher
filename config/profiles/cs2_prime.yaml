@@ -1,6 +1,7 @@
 # ============================================================================
-#  Профиль поиска: Counter-Strike 2 — аккаунты с Prime, FACEIT, инвентарём
-#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml.
+#  Профиль поиска: Counter-Strike 2 — аккаунты с Prime, FACEIT, ножами, медалями
+#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml, полный шаблон
+#  со всеми опциями — any_game_cheap_tops.yaml.
 # ============================================================================
 id: cs2_prime
 name: "CS2 — Prime / FACEIT / инвентарь"
@@ -8,8 +9,8 @@ game: cs2
 region: null
 enabled: true
 description: >-
-  Steam-аккаунты с CS2: Prime-статус, высокий ранг/FACEIT, ножи, перчатки,
-  ценный инвентарь и медали.
+  Steam-аккаунты с CS2: Prime-статус, высокий FACEIT/Premier, ножи и перчатки,
+  медали (5/10 Year Coin, Service Medal), дорогой инвентарь.
 
 sources:
   funpay:
@@ -24,13 +25,12 @@ sources:
   lolz:
     enabled: true
     category: steam
-    # Имена параметров проверьте в UI -> «Lolz» -> «Параметры» (категория steam).
     params:
-      game: [730]                  # 730 — AppID CS2
-      order_by: price_to_up
-      # csgo_prime: 1              # только с Prime (пример; проверьте имя параметра)
-      # pmin: 1000
-      # pmax: 50000
+      game: [730]                  # документированный параметр game[]: 730 — AppID CS2
+      order_by: price_to_up        # документированный параметр
+      # no_vac: 1                  # без VAC — проверьте через Параметры
+      # inv_game: 730              # инвентарь какой игры учитывать — проверьте через Параметры
+      # inv_min: 3000              # минимальная стоимость инвентаря — проверьте через Параметры
     pages: 3
     max_items: 500
 
@@ -38,52 +38,68 @@ criteria:
   price:
     min: 1000
     max: 50000
+  # Убраны общие слова: «инвентарь», «скины», «рейтинг», «coin» — они есть в каждом объявлении CS2.
   must_any:
     - "Prime => prime|прайм"
-    - "FACEIT => faceit|фейсит|фэйсит"
-    - "Global Elite => global|глобал*|global elite|supreme|суприм*|legendary eagle|орел|орёл"
-    - "Inventory => inventory|инвентар*|скин*|skin*"
-    - "Knife => нож*|knife|knives|керамбит|karambit|butterfly|бабочка"
-    - "Gloves => перчатк*|gloves"
-    - "Medals => медал*|medal*|coin|коин"
-    - "Premier => premier|премьер|рейтинг*|rating|elo|эло"
+    - "FACEIT => faceit|фейсит|фэйсит|face it"
+    - "Global Elite => global elite|глобал элит|глобал|supreme|суприм*|lem|legendary eagle"
+    - "Premier => premier|премьер|20к рейтинг*|25к рейтинг*|30к рейтинг*|20000 рейтинг*|25000 рейтинг*|30000 рейтинг*"
+    - "Нож => нож*|knife|knives|керамбит|karambit|butterfly|бабочка|байонет|bayonet|m9|флип|flip|skeleton|скелет*|talon|талон"
+    - "Перчатки => перчатк*|gloves"
+    - "Медали => медал*|medal*|service medal|5 year coin|10 year coin|5 лет|10 лет|5-летн*|10-летн*|five year|ten year"
+    - "Дорогой инвентарь => дорог* инвентар*|inventory worth|inventory value|инвентар* стоимост*|стоимост* инвентар*|inv value|инвентар* на|ценн* инвентар*|скин* на"
+    - "Dragon Lore => dragon lore|драгон лор|dlore"
+    - "Много часов => 2000 часов|3000 часов|4000 часов|5000 часов|10000 часов|2000 hours|3000 hours|5000 hours|10000 hours|5к часов|10к часов"
   must_all: []
   exclude:
-    - "vac|вак|vac ban|vac-ban|вакбан"
-    - "бан|ban|banned|забанен*|заблокирован*"
-    - "trade ban|трейд бан|трейдбан|trade-ban|блок* трейд*|запрет обмена"
-    - "red trust|красный траст|red trust factor"
-    - "без прайма|без prime|no prime|non prime|non-prime"
-    - "без почты|без доступа к почте|no email"
-    - "буст*|boost*|калибровк*"
-    - "аренда|в аренду|rent*"
+    - "забанен*|заблокирован*|banned|в бане|есть бан|стоит бан|словил бан|получил бан|с баном|пермабан|перма бан|permanent* ban*|perma ban"
+    - "без почты|без доступа к почте|почта не выдается|почта не дается|без привязки почты|без привязки к почте|почта не привязана|no email|without email|no mail access"
+    - "аренда|в аренду|арендовать|прокат|rent|rental|for rent|временн* доступ*|временн* аккаунт*|временное пользование|temporary access"
+    - "только обмен|на обмен|обменяю|меняю на|обмен на|trade only|for trade|swap only"
+    - "буст|бустинг|boost|boosting|boosted|калибровк*|calibration|прокачаю|накрутк*|услуг* прокачк*|elo boost"
+    - "общий аккаунт|общак|shared account|family shar*|фэмили шеринг|семейн* доступ*|семейн* библиотек*|на ваш аккаунт|на ваш акк|оффлайн активац*|offline activation|steam gift|гифт"
+    - "red trust|красный траст|красный trust|red tf"
+    - "без прайма|без prime|no prime|non prime|non-prime|нон прайм|non-prime status"
+    - "смурф*|smurf*|пуст* инвентар*|empty inventory|без инвентаря|no inventory|no skins|без скинов|стартов*|starter*"
+    - "cheat*|чит|читы|читами|читом|hack*|хак|хакнут*|софт|soft|wallhack|aimbot|аимбот|вх"   # «чит*» не пишем: «читайте описание»
   regex_any: []
+  # Наличие VAC/trade/game-бана; формы с отрицанием («без VAC бана», «no vac ban», «vac ban: нет») — пропускаем.
   regex_exclude:
-    - "(есть|стоит|имеется|получен|словил)\\s+(vac|бан|ban)"
+    - '(?<!no )(?<!без )(?<!нет )(?<!no-)(vac|вак|trade|трейд|game|гейм|игров\w*|community|overwatch|овервотч)[\s-]*(ban|бан)(?!\w*\s*[:\-–—]?\s*(нет|no|none|отсут|0\b))'
+    - '(есть|стоит|имеется|получен|словил|словлен|with|has)\s+(vac|вак|бан|ban|trade ban|трейд бан)'
+    - '(vac|вак)\s*[:\-–—]?\s*(есть|да|yes|имеется)'
+    # Голое «VAC» без отрицания рядом («VAC», «есть vac») — тоже отказ; «без VAC», «VAC: нет», «no vac ban» проходят.
+    - '(?<!no )(?<!без )(?<!нет )(?<!no-)(?<!без-)\b(vac|вак)(?!\s*-?\s*(ban|бан)?\w*\s*[:\-–—]?\s*(нет|no|none|отсут|0\b|free|фри|clean|чист))'
   numeric: []
   # numeric:
-  #   - {field: steam_level, min: 10}
+  #   - {field: steam_level, min: 10}          # проверьте имя поля через attributes["raw_keys"]
   #   - {field: csgo_inv_value, min: 5000}
   highlights:
     - "Prime => prime|прайм"
-    - "FACEIT => faceit|фейсит|фэйсит"
-    - "Global Elite => global elite|глобал*|global|ge"
+    - "FACEIT 10 => faceit 10|faceit lvl 10|faceit level 10|10 lvl faceit|10 лвл фейсит|фейсит 10|faceit 10 lvl"
+    - "FACEIT => faceit|фейсит|фэйсит|face it"
+    - "Global Elite => global elite|глобал элит|глобал"
     - "Supreme => supreme|суприм*"
     - "Premier => premier|премьер"
-    - "Knife => нож*|knife|knives"
     - "Karambit => керамбит|karambit"
     - "Butterfly => butterfly|бабочка"
-    - "Gloves => перчатк*|gloves"
-    - "AWP => awp|авп"
-    - "AK-47 => ak-47|ak47|ак-47|ак47|калаш*"
+    - "M9 Bayonet => m9|байонет|bayonet"
+    - "Нож => нож*|knife|knives|флип|flip|skeleton|скелет*|talon|талон"
+    - "Перчатки => перчатк*|gloves"
+    - "AK-47 | Redline => redline|редлайн"
+    - "AWP | Asiimov => asiimov|азимов"
     - "Dragon Lore => dragon lore|драгон лор|dlore"
-    - "Medals => медал*|medal*"
-    - "5 Year Coin => 5 year coin|5 лет|five year"
-    - "10 Year Coin => 10 year coin|10 лет|ten year"
-    - "Service Medal => service medal|сервис медал*"
-    - "Inventory => inventory|инвентар*"
+    - "Howl => howl|хоул|хаул"
+    - "StatTrak => stattrak|статтрек|стат трек|статтрек"
+    - "Souvenir => souvenir|сувенир*"
+    - "10 Year Coin => 10 year coin|10 year|10 лет|10-летн*|ten year|10 years"
+    - "5 Year Coin => 5 year coin|5 year|5 лет|5-летн*|five year|5 years"
+    - "Service Medal => service medal|сервис медал*|медаль за службу|медал*|medal*"
+    - "Loyalty Badge => loyalty badge|значок верности|лоялти"
+    - "Дорогой инвентарь => дорог* инвентар*|inventory worth|inventory value|инвентар* стоимост*|стоимост* инвентар*|inv value|инвентар* на|ценн* инвентар*"
+    - "Много часов => 2000 часов|3000 часов|4000 часов|5000 часов|10000 часов|2000 hours|3000 hours|5000 hours|10000 hours|5к часов|10к часов"
     - "Первый владелец => первый владелец|first owner|первовлад*"
-    - "Родная почта => родная почта|native mail|native email|полный доступ|full access"
+    - "Полный доступ => полный доступ|full access|родная почта|native mail|native email|первая почта"
   regions: []
   min_score: 1.0
   seller_min_reviews: null
@@ -101,11 +117,44 @@ pricing:
 
 lot_template:
   funpay_subcategory_id: null
-  title_ru: ""
-  title_en: ""
-  description_ru: ""
+  title_ru: "🔫 {game} Prime | {highlights} | Полный доступ, родная почта"
+  title_en: "🔫 {game} Prime account | {highlights} | Full access"
+  description_ru: |
+    🔫 {game} — аккаунт с Prime и инвентарём
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    📦 Что внутри:
+    {highlights_lines}
+
+    🛡 Гарантии магазина:
+    ✔ Аккаунт проверяется перед передачей: без VAC и трейд-банов на момент продажи
+    ✔ Полный доступ к Steam — меняете пароль, почту и Steam Guard на свои
+    ✔ Помогаем с первым входом и сменой данных
+    ✔ Сделка через FunPay — деньги под защитой площадки
+
+    🚚 Доставка:
+    • Выдача данных в чате после оплаты, обычно 10–60 минут
+    • Скриншоты инвентаря, медалей и ранга — по запросу в чате
+
+    💬 Напишите перед покупкой — подтвердим наличие и ответим на вопросы!
   description_en: ""
   amount: 1
   deactivate_after_sale: true
   active: true
   fields: {}
+
+examples:
+  positive:
+    - "CS2 Prime, FACEIT lvl 10, нож Karambit, перчатки, без VAC"
+    - "Аккаунт CS2: Prime, 10 Year Coin, Service Medal 2024, AK-47 | Redline, no vac ban"
+    - "CS2 Premier 25к рейтинга, Global Elite, 5-летняя медаль, инвентарь на 40к, vac ban: нет"
+    - "Steam аккаунт CS2 Prime, Dragon Lore, StatTrak, 3000 часов, обмен доступен"
+  negative:
+    - "CS2 Prime, VAC ban"
+    - "CS2 без прайма, 200 часов"
+    - "CS2 Prime, нож бабочка, есть trade ban"
+    - "CS2 Prime, Global Elite, red trust"
+    - "Буст FACEIT до 10 lvl — услуга"
+    - "CS2 Prime аккаунт в аренду на сутки"
+    - "CS2 Prime, нож, аккаунт с читами"
+    - "CS2 аккаунт, 500 часов, стандартный инвентарь"

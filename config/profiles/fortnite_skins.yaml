@@ -1,6 +1,7 @@
 # ============================================================================
-#  Профиль поиска: Fortnite — аккаунты с редкими скинами
-#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml.
+#  Профиль поиска: Fortnite — аккаунты с OG/редкими скинами
+#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml, полный шаблон
+#  со всеми опциями — any_game_cheap_tops.yaml.
 # ============================================================================
 id: fortnite_skins
 name: "Fortnite — редкие скины (OG)"
@@ -8,8 +9,8 @@ game: fortnite
 region: null
 enabled: false
 description: >-
-  Аккаунты Fortnite с редкими/OG скинами: Renegade Raider, Black Knight,
-  Galaxy, IKONIK, Wonder, Minty и т.п.
+  Аккаунты Fortnite с OG/редкими скинами (Renegade Raider, Black Knight, Galaxy,
+  IKONIK, Glow, Travis Scott, Minty...), аккаунты с 1–2 сезона, большие коллекции.
 
 sources:
   funpay:
@@ -24,13 +25,11 @@ sources:
   lolz:
     enabled: true
     category: fortnite
-    # Имена параметров проверьте в UI -> «Lolz» -> «Параметры» (категория fortnite).
     params:
-      order_by: price_to_up
-      # skin[]: ["Renegade Raider"]  # фильтр по скинам (пример; проверьте имя параметра)
-      # vbucks_min: 1000
-      # pmin: 1000
-      # pmax: 40000
+      order_by: price_to_up        # документированный параметр
+      # skins_min: 50              # минимум скинов — проверьте через Параметры
+      # vbucks_min: 1000           # минимум В-баксов — проверьте через Параметры
+      # skin: [...]                # фильтр по id скинов — проверьте через Параметры
     pages: 3
     max_items: 500
 
@@ -38,49 +37,70 @@ criteria:
   price:
     min: 1000
     max: 40000
+  # Убраны «скины», «редкие» — они есть в каждом объявлении Fortnite. Оставлены конкретные скины,
+  # признаки старого аккаунта (1–2 сезон) и большие коллекции.
   must_any:
-    - "Скины => скин*|skin*"
-    - "Renegade Raider => renegade*|ренегат*|ренегейд*"
-    - "Black Knight => black knight|черн* рыцар*|блэк найт"
+    - "Renegade Raider => renegade raider|renegade|ренегат*|ренегейд*"
+    - "Black Knight => black knight|черн* рыцар*|блэк найт|блек найт"
     - "Galaxy => galaxy|галакси|гэлакси"
-    - "IKONIK => ikonik|иконик"
-    - "OG => og|ог|олд*|old school|с 1 сезон*|1 сезон|season 1|season 2|2 сезон*"
-    - "Wonder => wonder|вандер"
-    - "Minty => minty|минти"
-    - "Reflex => reflex|рефлекс"
+    - "IKONIK => ikonik|иконик|айконик"
+    - "Glow => glow|глоу"
+    - "Wonder => wonder|вандер|вондер"
+    - "Travis Scott => travis scott|трэвис скотт|тревис скотт|travis|трэвис|тревис"
+    - "Minty => minty|минти|minty axe"
+    - "Aerial Assault Trooper => aerial assault|аэриал|aerial"
+    - "Recon Expert => recon expert|рекон эксперт|рекон"
+    - "Ghoul Trooper => ghoul trooper|гуль трупер|гул трупер|ghoul"
+    - "Skull Trooper => skull trooper|скал трупер|скалл трупер|skull"
     - "Honor Guard => honor guard|хонор гард"
-    - "Редкие скины => редк*|rare|раритет*|эксклюзив*|exclusive"
-    - "V-Bucks => в-баксы|vbucks|v-bucks|вбаксы|в баксы"
+    - "Double Helix => double helix|дабл хеликс"
+    - "Reflex => reflex|рефлекс"
+    - "OG => og|ог аккаунт|ог акк|old school"
+    - "1 сезон => season 1|сезон 1|1 сезон*|с 1 сезон*|с первого сезона|s1|ch1 s1|chapter 1 season 1|1 глава 1 сезон"
+    - "2 сезон => season 2|сезон 2|2 сезон*|с 2 сезон*|со второго сезона|s2|ch1 s2|chapter 1 season 2"
+    - "Большая коллекция => 100 скин*|150 скин*|200 скин*|250 скин*|300 скин*|400 скин*|500 скин*|100 skin*|150 skin*|200 skin*|300 skin*|500 skin*"
+    - "Save the World => save the world|stw|спасти мир|сохрани мир|founder*|фаундер*"
   must_all: []
   exclude:
-    - "бан|ban|banned|забанен*|заблокирован*"
-    - "без почты|без доступа к почте|no email|без доступа к epic"
-    - "аренда|в аренду|прокачка|буст*|boost*"
-    - "обмен|только обмен"
-    - "cheat*|чит*"                 # аккаунты с читами — риск бана
+    - "забанен*|заблокирован*|banned|в бане|есть бан|стоит бан|словил бан|получил бан|с баном|пермабан|перма бан|permanent* ban*|perma ban"
+    - "без почты|без доступа к почте|почта не выдается|почта не дается|без привязки почты|без привязки к почте|почта не привязана|no email|without email|no mail access|без доступа к epic|epic не выда*|без epic"
+    - "аренда|в аренду|арендовать|прокат|rent|rental|for rent|временн* доступ*|временн* аккаунт*|временное пользование|temporary access"
+    - "только обмен|на обмен|обменяю|меняю на|обмен на|trade only|for trade|swap only"
+    - "буст|бустинг|boost|boosting|boosted|прокачаю|прокачка на заказ|прокачка аккаунтов|услуг* прокачк*|накрутк*|в-баксы по курсу|вбаксы по курсу|пополнение"
+    - "cheat*|чит|читы|читами|читом|hack*|хак|хакнут*|софт|soft|aimbot|аимбот"   # «чит*» не пишем: «читайте описание»
+    - "только пк|только ps|только xbox|только консол*|ps only|xbox only|pc only|ps4 only|ps5 only"   # платформенные ограничения усложняют продажу
   regex_any: []
   regex_exclude:
-    - "(есть|стоит|имеется|получен|словил)\\s+бан"
+    - '(есть|стоит|имеется|получен|словил|словлен|with|has)\s+(бан|ban)'
   numeric: []
   # numeric:
-  #   - {field: skins_count, min: 30}
+  #   - {field: fortnite_skin_count, min: 50}     # проверьте имя поля через attributes["raw_keys"]
   highlights:
-    - "Renegade Raider => renegade*|ренегат*|ренегейд*"
-    - "Black Knight => black knight|черн* рыцар*|блэк найт"
+    - "Renegade Raider => renegade raider|renegade|ренегат*|ренегейд*"
+    - "Black Knight => black knight|черн* рыцар*|блэк найт|блек найт"
     - "Galaxy => galaxy|галакси|гэлакси"
-    - "IKONIK => ikonik|иконик"
-    - "Wonder => wonder|вандер"
-    - "Minty => minty|минти"
-    - "Reflex => reflex|рефлекс"
-    - "Honor Guard => honor guard|хонор гард"
-    - "Aerial Assault Trooper => aerial assault|аэриал"
-    - "Recon Expert => recon expert|рекон"
+    - "IKONIK => ikonik|иконик|айконик"
     - "Glow => glow|глоу"
+    - "Wonder => wonder|вандер|вондер"
+    - "Travis Scott => travis scott|трэвис скотт|тревис скотт|travis|трэвис|тревис"
+    - "Minty => minty|минти|minty axe"
+    - "Aerial Assault Trooper => aerial assault|аэриал|aerial"
+    - "Recon Expert => recon expert|рекон эксперт|рекон"
+    - "Ghoul Trooper => ghoul trooper|гуль трупер|гул трупер|ghoul"
+    - "Skull Trooper => skull trooper|скал трупер|скалл трупер|skull"
+    - "Honor Guard => honor guard|хонор гард"
     - "Double Helix => double helix|дабл хеликс"
-    - "OG => og|ог|old school|с 1 сезон*|season 1"
-    - "V-Bucks => в-баксы|vbucks|v-bucks|вбаксы|в баксы"
-    - "Save the World => save the world|ств|stw|спасти мир"
-    - "Родная почта => родная почта|native mail|полный доступ|full access"
+    - "Reflex => reflex|рефлекс"
+    - "Raiders Revenge => raiders revenge|райдерс ревендж"
+    - "Merry Mint Axe => merry mint|мерри минт|мятн* кирк*"
+    - "OG => og|ог аккаунт|ог акк|old school"
+    - "1 сезон => season 1|сезон 1|1 сезон*|с 1 сезон*|с первого сезона|s1|ch1 s1|chapter 1 season 1"
+    - "2 сезон => season 2|сезон 2|2 сезон*|с 2 сезон*|со второго сезона|s2|ch1 s2|chapter 1 season 2"
+    - "Большая коллекция => 100 скин*|150 скин*|200 скин*|250 скин*|300 скин*|400 скин*|500 скин*|100 skin*|150 skin*|200 skin*|300 skin*|500 skin*"
+    - "V-Bucks => в-баксы|вбаксы|в баксы|vbucks|v-bucks|v bucks|в-баксов|вбаксов"
+    - "Save the World => save the world|stw|спасти мир|сохрани мир|founder*|фаундер*"
+    - "Battle Pass => battle pass|батл пасс|батлпасс|все бп|all battle pass*"
+    - "Полный доступ => полный доступ|full access|родная почта|native mail|native email|первая почта"
   regions: []
   min_score: 1.0
   seller_min_reviews: null
@@ -98,11 +118,42 @@ pricing:
 
 lot_template:
   funpay_subcategory_id: null
-  title_ru: ""
-  title_en: ""
-  description_ru: ""
+  title_ru: "🪂 {game} OG | {highlights} | Полный доступ, смена почты"
+  title_en: "🪂 {game} OG account | {highlights} | Full access"
+  description_ru: |
+    🪂 {game} — аккаунт с редкими скинами
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    📦 Что внутри:
+    {highlights_lines}
+
+    🛡 Гарантии магазина:
+    ✔ Аккаунт проверяется перед передачей покупателю
+    ✔ Полный доступ к Epic Games — меняете пароль, почту и 2FA на свои
+    ✔ Помогаем с первым входом и сменой данных
+    ✔ Сделка через FunPay — деньги под защитой площадки
+
+    🚚 Доставка:
+    • Выдача данных в чате после оплаты, обычно 10–60 минут
+    • Полный список скинов и скриншоты шкафчика — по запросу в чате
+
+    💬 Напишите перед покупкой — подтвердим наличие и ответим на вопросы!
   description_en: ""
   amount: 1
   deactivate_after_sale: true
   active: true
   fields: {}
+
+examples:
+  positive:
+    - "Fortnite OG: Renegade Raider, Black Knight, 150 скинов"
+    - "Аккаунт Фортнайт с 1 сезона, Galaxy, IKONIK, Travis Scott, 2000 в-баксов, полный доступ"
+    - "Fortnite account season 2, Glow, Minty, Aerial Assault Trooper, 300 skins"
+  negative:
+    - "Fortnite 20 скинов, батл пасс 3 главы"
+    - "Fortnite Renegade Raider — аккаунт забанен"
+    - "Fortnite Black Knight, без доступа к Epic"
+    - "Fortnite OG аккаунт в аренду на день"
+    - "Fortnite Galaxy, IKONIK — читы в комплекте, software"
+    - "Пополнение В-баксов по курсу, Fortnite 1000 vbucks"
+    - {text: "Fortnite Renegade Raider, 500 скинов", price: 120000}

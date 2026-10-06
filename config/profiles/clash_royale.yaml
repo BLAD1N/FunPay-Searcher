@@ -1,0 +1,145 @@
+# ============================================================================
+#  Профиль поиска: Clash Royale (Supercell) — аккаунты с макс. уровнем короля,
+#  эволюциями, всеми легендарками/чемпионами и высокими кубками
+#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml, полный шаблон
+#  со всеми опциями — any_game_cheap_tops.yaml.
+# ============================================================================
+id: clash_royale
+name: "Clash Royale — макс. уровень и эволюции"
+game: clash_royale
+region: null
+enabled: false
+description: >-
+  Аккаунты Clash Royale с уровнем короля 14–16 / 50+, эволюциями, всеми легендарными
+  картами и чемпионами, 7000+ кубков / лига Ultimate Champion. Передача через Supercell ID.
+
+sources:
+  funpay:
+    enabled: true
+    subcategory_id: null
+    subcategory_ids: []
+    game_query: "Clash Royale"
+    subcategory_query: "Аккаунты"
+    server_filter: []
+    extra_query: {}
+    max_items: 500
+  lolz:
+    enabled: true
+    category: supercell
+    params:
+      order_by: price_to_up        # документированный параметр
+      # system: scroll             # scroll = Clash Royale — проверьте через Параметры
+      # trophies_min: 7000         # минимум кубков — проверьте через Параметры
+    pages: 3
+    max_items: 500
+
+criteria:
+  price:
+    min: 500
+    max: 20000
+  must_any:
+    - "Уровень короля => 14 уровн*|15 уровн*|16 уровн*|14 лвл|15 лвл|16 лвл|lvl 14|lvl 15|lvl 16|level 14|level 15|level 16|king level 14|king level 15|king level 16|14 кт|15 кт|16 кт|кт 14|кт 15|кт 16|king tower 15|king tower 16|50 уровн*|50 lvl|lvl 50|level 50|60 уровн*|60 lvl|lvl 60|70 уровн*|70 lvl|lvl 70"
+    - "Эволюции => эволюц*|evolution*|evo|эво|все эво"
+    - "Все легендарки => все легендар*|all legendar*|легендар*|legendary"
+    - "Чемпионы => все чемпион*|all champions|чемпион*|champion*"
+    - "Макс колода => макс* колод*|max* deck|фулл макс|full max|все карты макс|all max|all cards max*|макс карт*|max cards"
+    - "Все карты => все карты|all cards|фулл карт*|full cards"
+    - "Кубки => кубк*|трофе*|trophies|cups"
+    - "Ultimate Champion => ultimate champion|ультимейт чемпион|ульти|ultimate|grand champion|гранд чемпион|royal champion|роял чемпион|path of legends|путь легенд"
+  must_all: []
+  exclude:
+    - "забанен*|заблокирован*|banned|в бане|есть бан|стоит бан|словил бан|получил бан|с баном|пермабан|перма бан|permanent* ban*|perma ban"
+    - "без почты|без доступа к почте|почта не выдается|почта не дается|без привязки почты|без привязки к почте|почта не привязана|no email|without email|no mail access"
+    - "без supercell id|без суперселл айди|без sc id|без сц айди|supercell id не выда*|без доступа к supercell|без суперселл|no supercell id"
+    - "аренда|в аренду|арендовать|прокат|rent|rental|for rent|временн* доступ*|временн* аккаунт*|временное пользование|temporary access"
+    - "только обмен|на обмен|обменяю|меняю на|обмен на|trade only|for trade|swap only"
+    - "буст|бустинг|boost|boosting|boosted|прокачаю|прокачка на заказ|накрутк*|услуг* прокачк*|подниму кубк*|кубки на заказ|trophy push service"
+    - "гемы по курсу|гемов по курсу|пополнение|донат по курсу|top up|топ ап|пасс рояль по курсу|pass royale по курсу"
+    - "cheat*|чит|читы|читами|читом|hack*|хак|хакнут*|софт|приват* сервер*|private server|null's royale|nulls royale"
+  # Хотя бы одно: кубки от 7000 («7500 кубков», «9k trophies», «кубки: 8 000») или лига/уровень.
+  regex_any:
+    - '(?<!\d)([7-9]\d{3}|1\d{4}|[7-9][ .,]\d{3}|1\d[ .,]\d{3})\s*\+?\s*(кубк|трофе|trophies|trophy|cups|🏆)'
+    - '(?<!\d)([7-9]|1\d)(?:[.,]\d)?\s*(k|к|тыс\.?)\s*\+?\s*(кубк|трофе|trophies|trophy|cups|🏆)'
+    - '(кубк\w*|трофе\w*|trophies|🏆)\s*[:\-–—]?\s*([7-9]\d{3}|1\d{4}|[7-9][ .,]\d{3}|1\d[ .,]\d{3}|([7-9]|1\d)\s*(k|к|тыс))'
+    - '(ultimate|grand|royal)\s*champion|ульти\w*\s*чемпион|гранд\s*чемпион|роял\s*чемпион|path of legends|путь легенд'
+    - '(?<![a-zа-я])(king\s*level|king\s*tower|уровень\s*короля|кт|king|король|lvl|level|уровень|уровня)\s*[:\-–—]?\s*(1[4-6]|[5-7]\d)(?!\d)'
+    - '(?<!\d)(1[4-6]|[5-7]\d)\s*(уровн\w*|лвл|lvl|level|кт)(?!\w)'
+  regex_exclude: []
+  numeric: []
+  # numeric:
+  #   - {field: trophies, min: 7000}       # проверьте имя поля через attributes["raw_keys"]
+  highlights:
+    - "Уровень короля 16 => 16 уровн*|16 лвл|lvl 16|level 16|king level 16|16 кт|кт 16|king tower 16"
+    - "Уровень короля 15 => 15 уровн*|15 лвл|lvl 15|level 15|king level 15|15 кт|кт 15|king tower 15"
+    - "Уровень короля 14 => 14 уровн*|14 лвл|lvl 14|level 14|king level 14|14 кт|кт 14"
+    - "Уровень 50+ => 50 уровн*|50 lvl|lvl 50|level 50|60 уровн*|60 lvl|lvl 60|70 уровн*|70 lvl|lvl 70"
+    - "Эволюции => эволюц*|evolution*|evo|эво|все эво"
+    - "Все легендарки => все легендар*|all legendar*|легендар*|legendary"
+    - "Чемпионы => все чемпион*|all champions|чемпион*|champion*"
+    - "Макс колода => макс* колод*|max* deck|фулл макс|full max|все карты макс|all max|all cards max*|макс карт*|max cards"
+    - "Все карты => все карты|all cards|фулл карт*|full cards"
+    - "Ultimate Champion => ultimate champion|ультимейт чемпион|ульти|ultimate|grand champion|гранд чемпион|royal champion|роял чемпион"
+    - "Эмоции => эмоци*|emotes|эмоут*|все эмоции|all emotes"
+    - "Pass Royale => pass royale|пасс рояль|пасс роял|diamond pass|диамант* пасс|gold pass|голд пасс"
+    - "Гемы => гемы|гемов|гем|gems|кристалл*"
+    - "Старый аккаунт => с 2016|с 2017|с 2018|2016 год*|2017 год*|2018 год*|старый аккаунт|старый акк|олд акк|old account|с релиза"
+    - "Supercell ID => supercell id|суперселл айди|сц айди|sc id"
+  regions: []
+  min_score: 1.0
+  seller_min_reviews: null
+
+pricing:
+  mode: tiers
+  formula: "price * 2 - 1000"
+  percent: 80.0
+  multiplier: 1.9
+  tiers:
+    - {up_to: 2000, percent: 150}
+    - {up_to: 10000, percent: 100}
+    - {up_to: 20000, percent: 80}
+  min_margin: 500
+  round_to: 50
+  round_mode: nearest
+  price_ending: null
+
+lot_template:
+  funpay_subcategory_id: null
+  title_ru: "👑 {game} | {highlights} | Supercell ID, полный доступ"
+  title_en: "👑 {game} account | {highlights} | Supercell ID, full access"
+  description_ru: |
+    👑 {game} — прокачанный аккаунт
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    📦 Что внутри:
+    {highlights_lines}
+
+    🛡 Гарантии магазина:
+    ✔ Аккаунт проверяется перед передачей покупателю
+    ✔ Передача через Supercell ID — привязываете свою почту
+    ✔ Помогаем с первым входом и сменой данных
+    ✔ Сделка через FunPay — деньги под защитой площадки
+
+    🚚 Доставка:
+    • Выдача данных в чате после оплаты, обычно 10–60 минут
+    • Скриншоты профиля, карт и колод — по запросу в чате
+
+    💬 Напишите перед покупкой — подтвердим наличие и ответим на вопросы!
+  description_en: ""
+  amount: 1
+  deactivate_after_sale: true
+  active: true
+  fields: {}
+
+examples:
+  positive:
+    - "Clash Royale 15 уровень короля, 8500 кубков, все легендарки, 6 эволюций"
+    - "Клэш Рояль аккаунт кт 16, Ultimate Champion, макс колода, все чемпионы, Supercell ID"
+    - "Clash Royale account level 60, 9k trophies, all cards, evolutions, old account 2016"
+  negative:
+    - "Clash Royale 9 уровень, 3000 кубков"
+    - "Clash Royale 15 кт, 8000 кубков — аккаунт забанен"
+    - "Clash Royale 16 кт, все легендарки, без Supercell ID"
+    - "Подниму кубки Clash Royale — услуга, буст"
+    - "Clash Royale 15 lvl account for rent"
+    - "Гемы Clash Royale по курсу, пополнение"
+    - "Clash Royale 12 уровень, 5500 кубков, 2 легендарки"

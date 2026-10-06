@@ -1,0 +1,154 @@
+# ============================================================================
+#  Профиль поиска: Roblox — аккаунты с Robux, лимитками (Limiteds), Korblox/Headless
+#  и ценными предметами в популярных играх
+#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml, полный шаблон
+#  со всеми опциями — any_game_cheap_tops.yaml.
+# ============================================================================
+id: roblox
+name: "Roblox — Robux, лимитки, Headless/Korblox"
+game: roblox
+region: null
+enabled: false
+description: >-
+  Аккаунты Roblox с запасом Robux (1000+), лимитированными предметами (Limiteds, Dominus,
+  Valkyrie, Headless, Korblox), высоким RAP и прокачкой в Blox Fruits / MM2 / Adopt Me.
+
+sources:
+  funpay:
+    enabled: true
+    subcategory_id: null
+    subcategory_ids: []
+    game_query: "Roblox"
+    subcategory_query: "Аккаунты"
+    server_filter: []
+    extra_query: {}
+    max_items: 500
+  lolz:
+    enabled: true
+    category: roblox
+    params:
+      order_by: price_to_up        # документированный параметр
+      # robux_min: 1000            # минимум Robux — проверьте через Параметры
+      # rap_min: 10000             # минимум RAP — проверьте через Параметры
+    pages: 3
+    max_items: 500
+
+criteria:
+  price:
+    min: 300
+    max: 30000
+  must_any:
+    - "Robux => робакс*|robux|rbx"
+    - "Limiteds => лимитед*|лимитк*|limited*|лимитированн*"
+    - "Headless => headless|хедлес*|безголов*|headless horseman"
+    - "Korblox => korblox|корблокс"
+    - "Dominus => dominus|доминус"
+    - "Valkyrie => valkyrie|валькири*|valk"
+    - "Fedora => fedora|федора|sparkle time"
+    - "RAP => rap|рап"
+    - "Premium => roblox premium|премиум подписк*|подписка премиум|premium 450|premium 1000|premium 2200|премиум 450|премиум 1000|премиум 2200"
+    - "Старый аккаунт => 2010 год*|2012 год*|2014 год*|2015 год*|2016 год*|2017 год*|с 2010|с 2012|с 2014|с 2015|с 2016|с 2017|old account|старый аккаунт|старый акк|олд акк|veteran|ветеран*|aged"
+    - "Blox Fruits => blox fruit*|блокс фрут*|max lvl|макс лвл|макс уровень|awakened|пробужден*|kitsune|кицунэ|мифическ* фрукт*|mythical fruit*|leopard|леопард|dough|доу"
+    - "MM2 => mm2|мм2|murder mystery|годли|godly|chroma|хрома|ancient|анциент"
+    - "Adopt Me => adopt me|адопт ми|neon|неон|mega neon|мега неон|frost dragon|shadow dragon|bat dragon|фрост дракон|шадоу дракон"
+    - "Pet Simulator => pet sim*|пет сим*|huge|хьюдж|titanic|титаник|exclusive pet*"
+    - "Grow a Garden => grow a garden|гроу а гарден|гроу э гарден"
+  must_all: []
+  exclude:
+    - "забанен*|заблокирован*|banned|в бане|есть бан|стоит бан|словил бан|получил бан|с баном|пермабан|перма бан|permanent* ban*|perma ban|terminated|терминирован*"
+    - "без почты|без доступа к почте|почта не выдается|почта не дается|без привязки почты|без привязки к почте|почта не привязана|no email|without email|no mail access"
+    - "с пином|с пин кодом|с пин-кодом|пин не снимается|pin не выдается|pin не снят|pin включен|pin включён|pin on|пин включен"   # PIN-код не даст сменить данные («без пина» — плюс)
+    - "аренда|в аренду|арендовать|прокат|rent|rental|for rent|временн* доступ*|временн* аккаунт*|временное пользование|temporary access"
+    - "только обмен|на обмен|обменяю|меняю на|обмен на|trade only|for trade|swap only"
+    - "буст|бустинг|boost|boosting|boosted|прокачаю|прокачка на заказ|накрутк*|услуг* прокачк*|фарм на заказ"
+    - "продажа робакс*|продам робакс*|робаксы по курсу|робакс по курсу|по курсу|пополню|пополнение|gift card|gift-card|гифткарт*|гифт карт*|подарочн* карт*|код активации|промокод*|promo code*|robux delivery"   # продажа валюты/кодов
+    - "до 13 лет|under 13|детский аккаунт|детский акк|аккаунт ребенка"
+    - "cheat*|чит|читы|читами|читом|hack*|хак|хакнут*|софт|exploit*|эксплойт*|скрипт*"
+  # Хотя бы одно: Robux от 1000, RAP от 10 000 или редкий предмет/прокачка.
+  regex_any:
+    - '(?<!\d)(\d{1,3}[ .,]\d{3}|\d{4,7}|\d{1,3}\s*(k|к|тыс\.?))\s*\+?\s*(robux|робакс\w*|rbx|r\$)'
+    - '(robux|робакс\w*|rbx|r\$)\s*[:\-–—]?\s*(\d{1,3}[ .,]\d{3}|\d{4,7}|\d{1,3}\s*(k|к|тыс))'
+    - '(rap|рап)\s*[:\-–—]?\s*(\d{2,3}[ .,]\d{3}|\d{5,8}|\d{2,4}\s*(k|к|тыс))'
+    - 'headless|хедлес|korblox|корблокс|dominus|доминус|valkyrie|валькири|лимитк|лимитед|limited|годли|godly|chroma|хрома|mega neon|мега неон|frost dragon|kitsune|кицунэ|мифическ\w+ фрукт|mythical fruit|titanic|титаник|huge'
+  regex_exclude: []
+  numeric: []
+  # numeric:
+  #   - {field: robux, min: 1000}          # проверьте имя поля через attributes["raw_keys"]
+  #   - {field: rap, min: 10000}
+  highlights:
+    - "Headless => headless|хедлес*|безголов*|headless horseman"
+    - "Korblox => korblox|корблокс"
+    - "Dominus => dominus|доминус"
+    - "Valkyrie => valkyrie|валькири*|valk"
+    - "Fedora => fedora|федора|sparkle time"
+    - "Limiteds => лимитед*|лимитк*|limited*|лимитированн*"
+    - "Robux => робакс*|robux|rbx"
+    - "RAP => rap|рап"
+    - "Premium => roblox premium|премиум подписк*|подписка премиум|premium 450|premium 1000|premium 2200|премиум 450|премиум 1000|премиум 2200"
+    - "Старый аккаунт => 2010 год*|2012 год*|2014 год*|2015 год*|2016 год*|2017 год*|с 2010|с 2012|с 2014|с 2015|с 2016|с 2017|old account|старый аккаунт|старый акк|олд акк|veteran|ветеран*|aged"
+    - "Blox Fruits => blox fruit*|блокс фрут*|max lvl|макс лвл|макс уровень|awakened|пробужден*|kitsune|кицунэ|мифическ* фрукт*|mythical fruit*|leopard|леопард|dough|доу"
+    - "MM2 => mm2|мм2|murder mystery|годли|godly|chroma|хрома|ancient|анциент"
+    - "Adopt Me => adopt me|адопт ми|neon|неон|mega neon|мега неон|frost dragon|shadow dragon|bat dragon|фрост дракон|шадоу дракон"
+    - "Pet Simulator => pet sim*|пет сим*|huge|хьюдж|titanic|титаник|exclusive pet*"
+    - "Grow a Garden => grow a garden|гроу а гарден|гроу э гарден"
+    - "Без PIN => без пина|без pin|no pin|пин снят|pin off|пин не стоит"
+    - "Полный доступ => полный доступ|full access|родная почта|native mail|native email|первая почта"
+  regions: []
+  min_score: 1.0
+  seller_min_reviews: null
+
+pricing:
+  mode: tiers
+  formula: "price * 2 - 1000"
+  percent: 80.0
+  multiplier: 1.9
+  tiers:
+    - {up_to: 1000, percent: 150}
+    - {up_to: 5000, percent: 100}
+    - {up_to: 30000, percent: 80}
+  min_margin: 300
+  round_to: 50
+  round_mode: nearest
+  price_ending: null
+
+lot_template:
+  funpay_subcategory_id: null
+  title_ru: "🧱 {game} | {highlights} | Полный доступ, без PIN"
+  title_en: "🧱 {game} account | {highlights} | Full access, no PIN"
+  description_ru: |
+    🧱 {game} — аккаунт с Robux и редкими предметами
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    📦 Что внутри:
+    {highlights_lines}
+
+    🛡 Гарантии магазина:
+    ✔ Аккаунт проверяется перед передачей покупателю
+    ✔ Полный доступ — меняете пароль и привязываете свою почту, PIN не стоит
+    ✔ Помогаем с первым входом и сменой данных
+    ✔ Сделка через FunPay — деньги под защитой площадки
+
+    🚚 Доставка:
+    • Выдача данных в чате после оплаты, обычно 10–60 минут
+    • Скриншоты инвентаря, Robux и RAP — по запросу в чате
+
+    💬 Напишите перед покупкой — подтвердим наличие и ответим на вопросы!
+  description_en: ""
+  amount: 1
+  deactivate_after_sale: true
+  active: true
+  fields: {}
+
+examples:
+  positive:
+    - "Roblox аккаунт: 5000 робаксов, Headless, Korblox, без пина, родная почта"
+    - "Roblox account 2014, RAP 150k, Dominus, limiteds, 1,500 robux"
+    - "Роблокс акк Blox Fruits макс лвл, кицунэ, MM2 годли, 2к робаксов"
+  negative:
+    - "Roblox аккаунт 50 робаксов, новый"
+    - "Roblox Headless, Korblox — аккаунт забанен (terminated)"
+    - "Продам робаксы по курсу, 1000 robux дешево"
+    - "Roblox аккаунт 3000 робаксов с пином, pin не снят"
+    - "Roblox account 5000 robux for rent"
+    - "Roblox Dominus, 10k robux, без доступа к почте"
+    - "Roblox детский аккаунт до 13 лет, 2000 робаксов"

@@ -1,6 +1,7 @@
 # ============================================================================
 #  Профиль поиска: World of Tanks (Wargaming, EU) — топовые аккаунты
-#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml.
+#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml, полный шаблон
+#  со всеми опциями — any_game_cheap_tops.yaml.
 # ============================================================================
 id: wot_eu_tops
 name: "WoT (EU) — топовые аккаунты"
@@ -8,8 +9,8 @@ game: wot
 region: EU
 enabled: false
 description: >-
-  Аккаунты World of Tanks на европейском сервере Wargaming с техникой X уровня
-  и наградными танками.
+  Аккаунты World of Tanks на европейском сервере Wargaming с техникой X уровня,
+  наградными танками и коллекционными ангарами.
 
 sources:
   funpay:
@@ -25,10 +26,9 @@ sources:
     enabled: true
     category: world-of-tanks
     params:
-      order_by: price_to_up
-      # region: eu                   # фильтр региона — имя параметра проверьте в UI -> «Lolz» -> «Параметры»
-      # pmin: 3000
-      # pmax: 60000
+      order_by: price_to_up          # документированный параметр; pmin/pmax подставятся из criteria.price
+      # wot_region: eu              # регион сервера — проверьте через Параметры
+      # tanks_min: 30                # минимум танков — проверьте через Параметры
     pages: 3
     max_items: 500
 
@@ -36,41 +36,57 @@ criteria:
   price:
     min: 3000
     max: 60000
+  # Только маркеры качества; «account», «tanks», «premium» сами по себе не пишем.
   must_any:
-    - "Все топы => все топы|все топ*|топ* танк*|топов*|топы|all tops|all tier 10|tier 10|tier x|t10"
-    - "Все десятки => все 10|все десятки|десятки|десяток|все х|все x"
+    - "Все топы => все топы|все топ*|всех топов|всеми топами|топ* танк*|топов*|топы|all tops|all tier 10|all tier x|tier 10|tier x|t10|50 топов|60 топов|70 топов|80 топов|100 топов"
+    - "Все десятки => все 10|все десятки|всех десяток|десятки|десяток|все х|все x|20 десяток|30 десяток|40 десяток|50 десяток"
     - "10 lvl => 10 lvl|10 лвл|10 уровн*|10 ур|х лвл|x lvl|х уровн*|x уровн*|level 10|lvl 10"
-    - "Chieftain => чифтейн|chieftain|чифт*"
-    - "Об. 279 (р) => об 279|объект 279|об279|279 р|279р|obj 279|object 279"
+    - "Коллекционер => коллекционер*|коллекционн* ангар*|все ветки|все танки|полн* коллекц*|collector*|all lines|all tanks|full collection"
+    - "Chieftain => чифтейн|chieftain|чифт*|t95 fv4201|т95 fv4201|fv4201"
+    - "Об. 279 (р) => об 279|объект 279|об279|279 р|279р|obj 279|object 279|279e|279 e"
     - "Об. 260 => об 260|объект 260|об260|obj 260|object 260"
-    - "Премы => прем* танк*|премы|премов|прем|premium tank*|premiums"
-    - "Наградная техника => наградн* танк*|наградн* техник*|reward tank*|clan tank*"
+    - "Об. 907 => об 907|объект 907|об907|obj 907|object 907"
+    - "Carro 45t => carro 45t|carro|карро"
+    - "Kampfpanzer 07 RH => kampfpanzer|кампфпанцер|kpz 07|kpz07|07 rh"
+    - "121B => 121b|121б"
+    - "M60 => m60|м60|м 60"
+    - "VK 72.01 K => vk 72.01|vk 72|vk72|вк 72|7201 k|7201 к"
+    - "Премы => прем* танк*|премы|премов|премтанк*|premium tank*|premiums|prem tank*"
+    - "Наградная техника => наградн* танк*|наградн* техник*|reward tank*|clan tank*|clan reward*|наградк*"
   must_all: []
   exclude:
-    - "бан|ban|banned|забанен*|заблокирован*"
-    - "без почты|без доступа к почте|no email|without email"
-    - "blitz|блиц"
-    - "аренда|в аренду|прокачка|буст*|boost*|rent*"
-    - "обмен|только обмен"
-    - "lesta|леста|мир танков"        # RU-сервер — это профиль EU
+    - "забанен*|заблокирован*|banned|в бане|есть бан|стоит бан|словил бан|получил бан|с баном|пермабан|перма бан|permanent* ban*|perma ban"
+    - "без почты|без доступа к почте|почта не выдается|почта не дается|без привязки почты|без привязки к почте|почта не привязана|no email|without email|no mail access"
+    - "аренда|в аренду|арендовать|прокат|rent|rental|for rent|временн* доступ*|временн* аккаунт*|временное пользование|temporary access"
+    - "только обмен|на обмен|обменяю|меняю на|обмен на|trade only|for trade|swap only"
+    - "буст|бустинг|boost|boosting|boosted|прокачаю|прокачка на заказ|прокачка аккаунтов|прокачка вашего|услуг* прокачк*|накрутк*|power leveling|powerleveling"
+    - "blitz|блиц|tanks blitz|мир кораблей|world of warships|wows|warplanes|консольн*|console|modern armor"
+    - "lesta|леста|лесты|мир танков|ru сервер|сервер ru|ру сервер|снг"        # RU-сервер — это профиль EU
+    - "na сервер|сервер na|asia сервер|сервер asia|na server|asia server"
   regex_any: []
   regex_exclude:
-    - "(есть|стоит|имеется|получен|словил)\\s+бан"
+    - '(есть|стоит|имеется|получен|словил|словлен|with|has)\s+(бан|ban)'
   numeric: []
   highlights:
-    - "Chieftain => chieftain|чифтейн|чифт*|т95 fv4201|t95 fv4201"
-    - "Об. 279 (р) => об 279|объект 279|об279|279 р|279р|obj 279|object 279"
+    - "Chieftain => chieftain|чифтейн|чифт*|t95 fv4201|т95 fv4201|fv4201"
+    - "Об. 279 (р) => об 279|объект 279|об279|279 р|279р|obj 279|object 279|279e|279 e"
     - "Об. 260 => об 260|объект 260|об260|obj 260|object 260"
-    - "Об. 907 => об 907|объект 907|об907|obj 907"
-    - "Об. 140 => об 140|объект 140|об140|obj 140"
-    - "Об. 268/4 => об 268 4|объект 268 4|об 268/4|268 4"
+    - "Об. 907 => об 907|объект 907|об907|obj 907|object 907"
+    - "Carro 45t => carro 45t|carro|карро"
+    - "Kampfpanzer 07 RH => kampfpanzer|кампфпанцер|kpz 07|kpz07|07 rh"
+    - "121B => 121b|121б"
+    - "M60 => m60|м60|м 60"
+    - "VK 72.01 K => vk 72.01|vk 72|vk72|вк 72|7201 k|7201 к"
+    - "Об. 140 => об 140|объект 140|об140|obj 140|object 140"
+    - "Об. 268/4 => об 268 4|объект 268 4|об 268/4|268 4|obj 268 4"
     - "E 100 => е 100|е100|e-100"
     - "E 50 M => е 50 м|е50м|e 50m|e50 m"
     - "ИС-7 => ис-7|ис7|ис 7|is-7|is7"
+    - "ИС-4 => ис-4|ис4|is-4"
     - "60TP => 60tp|60тр|60 тп|60тп"
     - "Strv 103B => strv|стрв|strv 103|103b"
-    - "Kranvagn => kranvagn|крана|кранваген|кран"
-    - "Super Conqueror => super conqueror|супер конь|суперконь|s conq"
+    - "Kranvagn => kranvagn|крана|кранваген|кранвагн"
+    - "Super Conqueror => super conqueror|супер конь|суперконь|super conq|s conq"
     - "WT E 100 => wt e 100|wt e100|вафля|waffentrager|ваффентрагер"
     - "Type 5 => type 5|тайп 5"
     - "Maus => maus|маус"
@@ -80,7 +96,9 @@ criteria:
     - "BZ-176 => bz-176|bz176|бз-176|бз 176"
     - "Skorpion G => skorpion|скорпион"
     - "Progetto => progetto|прогетто"
-    - "Löwe => lowe|löwe|лев|лёва|лева"
+    - "Löwe => lowe|löwe|лёва|лева"
+    - "AMX 50 B => amx 50 b|amx 50b|амх 50"
+    - "Коллекционер => коллекционер*|коллекционн* ангар*|все ветки|все танки|полн* коллекц*|collector*|all lines|all tanks"
     - "Голда => голд*|gold|золот*"
   regions: ["EU"]
   min_score: 1.0
@@ -99,13 +117,63 @@ pricing:
 
 lot_template:
   funpay_subcategory_id: null
-  title_ru: ""                  # пусто — "{game} | {highlights} | {region}"
-  title_en: ""
-  description_ru: ""            # пусто — встроенный шаблон «нашего стиля»
-  description_en: ""
+  title_ru: "🏆 {game_short} EU (Wargaming) | {highlights} | Полный доступ"
+  title_en: "🏆 {game_short} EU account | {highlights} | Full access"
+  description_ru: |
+    🏆 {game} ({region}) — топовый аккаунт Wargaming
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    📦 Что внутри:
+    {highlights_lines}
+
+    🛡 Гарантии магазина:
+    ✔ Аккаунт проверяется перед передачей покупателю
+    ✔ Полный доступ — меняете пароль и привязываете свою почту
+    ✔ Помогаем с первым входом и сменой данных
+    ✔ Сделка через FunPay — деньги под защитой площадки
+
+    🚚 Доставка:
+    • Сервер: {region} (Wargaming)
+    • Выдача данных в чате после оплаты, обычно 10–60 минут
+    • Состав ангара, статистика и привязки — по запросу в чате
+
+    💬 Напишите перед покупкой — подтвердим наличие и ответим на вопросы!
+  description_en: |
+    🏆 {game} ({region}) — top-tier Wargaming account
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    📦 What's inside:
+    {highlights_lines}
+
+    🛡 Our guarantees:
+    ✔ Account is checked before delivery
+    ✔ Full access — you change the password and link your own e-mail
+    ✔ We help with the first login and data change
+    ✔ The deal goes through FunPay — your money is protected
+
+    🚚 Delivery:
+    • Server: {region} (Wargaming)
+    • Credentials in chat after payment, usually within 10–60 minutes
+    • Garage contents, stats and bindings — on request in chat
+
+    💬 Message us before buying — we'll confirm availability!
   amount: 1
   deactivate_after_sale: true
   active: true
   fields: {}
   # fields:
   #   server: "EU"
+
+examples:
+  positive:
+    - "WoT EU account, all tier 10, Chieftain, Kranvagn, no ban"
+    - "Продам акк WoT Европа, все топы, Об. 279 (р), Carro 45t, E 100, 15к gold"
+    - "World of Tanks EU collector account: all lines researched, Object 907, 121B, M60"
+  negative:
+    - "WoT EU account, all tier 10, Chieftain, VAC — account is banned"
+    - {text: "WoT все топы, Chieftain, Lesta", price: 15000, region: "RU"}
+    - {text: "WoT EU all tier 10, Chieftain", price: 150000, region: "EU"}
+    - "WoT EU 3 tier 8 tanks, premium account 30 days"
+    - "WoT Blitz EU все топы, Е 100"
+    - "Rent WoT EU account with all tops for a week"
+    - "Boosting service WoT EU: all tier 10 in a week"

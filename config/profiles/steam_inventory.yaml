@@ -1,0 +1,157 @@
+# ============================================================================
+#  Профиль поиска: Steam (любые игры) — аккаунты с дорогим инвентарём
+#  Ищем по стоимости инвентаря (CS2, Dota 2, TF2, Rust...), а не по конкретной игре.
+#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml, полный шаблон
+#  со всеми опциями — any_game_cheap_tops.yaml.
+# ============================================================================
+id: steam_inventory
+name: "Steam — дорогой инвентарь (любая игра)"
+game: steam                      # нет в GAME_NAMES — в шаблоне подставится «Steam»
+region: null
+enabled: false
+description: >-
+  Steam-аккаунты с инвентарём от 5 000 ₽ / 50 $ (ножи и перчатки CS2, арканы Dota 2,
+  Unusual TF2, скины Rust), высоким уровнем Steam и большим стажем.
+
+sources:
+  funpay:
+    enabled: true
+    subcategory_id: null
+    subcategory_ids: []
+    game_query: "Steam"            # на FunPay есть общая игра «Steam» с подкатегорией «Аккаунты» — проверьте в UI -> «Категории»
+    subcategory_query: "Аккаунты"
+    server_filter: []
+    extra_query: {}
+    max_items: 500
+  lolz:
+    enabled: true
+    category: steam
+    params:
+      order_by: price_to_up        # документированный параметр
+      # inv_game: 730              # инвентарь какой игры считать (730 CS2, 570 Dota 2, 440 TF2, 252490 Rust) — проверьте через Параметры
+      # inv_min: 5000              # минимальная стоимость инвентаря — проверьте через Параметры
+      # level_min: 20              # уровень Steam — проверьте через Параметры
+      # no_vac: 1                  # без VAC — проверьте через Параметры
+    pages: 3
+    max_items: 500
+
+criteria:
+  price:
+    min: 2000
+    max: 100000
+  must_any:
+    - "Дорогой инвентарь => дорог* инвентар*|inventory worth|inventory value|инвентар* стоимост*|стоимост* инвентар*|inv value|инвентар* на|ценн* инвентар*|expensive inventory|скин* на|skins worth|скинов на|инвентарь от|инвентарь ценой"
+    - "Нож => нож*|knife|knives|керамбит|karambit|butterfly|бабочка|байонет|bayonet|m9|флип|flip|skeleton|скелет*|talon|талон"
+    - "Перчатки => перчатк*|gloves"
+    - "Арканы => аркан*|arcana*|immortal*|иммортал*|dragonclaw|драгонклав"
+    - "Unusual => unusual|анюжуал|анужуал|unusual hat*|australium|австралиум"
+    - "Rust скины => rust skin*|раст скин*|скины rust|скины раст*"
+    - "Dragon Lore => dragon lore|драгон лор|dlore|howl|хоул"
+    - "Уровень Steam => 100 lvl|lvl 100|100 уровн*|уровень 100|level 100|200 lvl|lvl 200|300 lvl|level 200|level 300|500 lvl|level 500|50 lvl|lvl 50|level 50|50 уровн*|200 уровн*|300 уровн*"
+    - "Много игр => 100 игр|200 игр|300 игр|500 игр|1000 игр|100 games|200 games|300 games|500 games|1000 games|много игр|many games|библиотек* на"
+    - "Ветеран => years of service|10 year*|15 year*|20 year*|10-летн*|15-летн*|20-летн*|с 2004|с 2005|с 2006|с 2007|с 2008|с 2009|с 2010|2004 год*|2005 год*|2006 год*|2007 год*|2008 год*|2009 год*|2010 год*|old account|старый аккаунт|старый акк|олд акк|15 лет|20 лет|15 years|20 years"
+  must_all: []
+  exclude:
+    - "забанен*|заблокирован*|banned|в бане|есть бан|стоит бан|словил бан|получил бан|с баном|пермабан|перма бан|permanent* ban*|perma ban"
+    - "без почты|без доступа к почте|почта не выдается|почта не дается|без привязки почты|без привязки к почте|почта не привязана|no email|without email|no mail access"
+    - "аренда|в аренду|арендовать|прокат|rent|rental|for rent|временн* доступ*|временн* аккаунт*|временное пользование|temporary access"
+    - "только обмен|на обмен|обменяю|меняю на|обмен на|trade only|for trade|swap only"
+    - "буст|бустинг|boost|boosting|boosted|прокачаю|накрутк*|услуг* прокачк*|level up service|прокачка уровня стим"
+    - "общий аккаунт|общак|shared account|family shar*|фэмили шеринг|семейн* доступ*|семейн* библиотек*|на ваш аккаунт|на ваш акк|оффлайн активац*|offline activation|steam gift|гифт"
+    - "пуст* инвентар*|empty inventory|без инвентаря|no inventory|no skins|без скинов"
+    - "в холде|на холде|с холдом|под холдом|on hold|trade hold 7|холд 7 дней|холд 15 дней"   # «холд» голым не пишем: «без холда» — плюс
+    - "red trust|красный траст|красный trust"
+    - "cheat*|чит|читы|читами|читом|hack*|хак|хакнут*|софт|soft|aimbot|аимбот"
+    - "пополнение|top up|топ ап|кошелек по курсу|wallet code|код пополнения|подарочн* карт*|gift card"
+  # Хотя бы одно: стоимость инвентаря числом (5 000+ ₽ / 50+ $) или конкретные дорогие предметы.
+  regex_any:
+    - '(инвентар\w*|inventory|inv|скин\w*|skins)[^\d\n]{0,25}(\d{1,3}(?:[ .,]\d{3})+|\d{4,7}|\d{1,3}(?:[.,]\d)?\s*(k|к|тыс))\s*(руб|₽|р\.|р\b|rub|\$|usd|долл|€|eur)?'
+    - '(инвентар\w*|inventory|inv|скин\w*|skins)[^\d\n]{0,25}\$\s*\d{2,6}'
+    - '\$\s*(\d{1,3}(?:[ .,]\d{3})+|\d{2,6})\s*(инвентар|inventory|inv|скин|skins)'
+    - 'нож|knife|knives|керамбит|karambit|бабочк|butterfly|перчатк|gloves|аркан|arcana|dragonclaw|unusual|анюжуал|australium|dragon lore|драгон лор|dlore|howl'
+  regex_exclude:
+    - '(?<!no )(?<!без )(?<!нет )(?<!no-)(vac|вак|trade|трейд|game|гейм|игров\w*|community)[\s-]*(ban|бан)(?!\w*\s*[:\-–—]?\s*(нет|no|none|отсут|0\b))'
+    - '(есть|стоит|имеется|получен|словил|словлен|with|has)\s+(vac|вак|бан|ban|trade ban|трейд бан)'
+    - '(vac|вак)\s*[:\-–—]?\s*(есть|да|yes|имеется)'
+    # Голое «VAC» без отрицания рядом («VAC», «есть vac») — тоже отказ; «без VAC», «VAC: нет», «no vac ban» проходят.
+    - '(?<!no )(?<!без )(?<!нет )(?<!no-)(?<!без-)\b(vac|вак)(?!\s*-?\s*(ban|бан)?\w*\s*[:\-–—]?\s*(нет|no|none|отсут|0\b|free|фри|clean|чист))'
+  # Числовые правила по полям Lolz: отсутствующее поле не отклоняет, а вот inv_value: 0 — отклонит.
+  # Имена полей ПРОВЕРЬТЕ через attributes["raw_keys"] найденного объявления (могут быть
+  # steam_inv_value, inv_value, csgo_inv_value, dota2_inv_value ...).
+  numeric:
+    - {field: inv_value, min: 5000}
+    - {field: steam_inv_value, min: 5000}
+  highlights:
+    - "Дорогой инвентарь => дорог* инвентар*|inventory worth|inventory value|инвентар* стоимост*|стоимост* инвентар*|inv value|инвентар* на|ценн* инвентар*|expensive inventory|скин* на|skins worth|скинов на|инвентарь от|инвентарь ценой"
+    - "Karambit => керамбит|karambit"
+    - "Butterfly => butterfly|бабочка"
+    - "Нож => нож*|knife|knives|байонет|bayonet|m9|флип|flip|skeleton|скелет*|talon|талон"
+    - "Перчатки => перчатк*|gloves"
+    - "Dragon Lore => dragon lore|драгон лор|dlore"
+    - "Howl => howl|хоул|хаул"
+    - "Арканы => аркан*|arcana*|immortal*|иммортал*|dragonclaw|драгонклав"
+    - "Unusual => unusual|анюжуал|анужуал|unusual hat*|australium|австралиум"
+    - "Rust скины => rust skin*|раст скин*|скины rust|скины раст*"
+    - "Уровень Steam => 100 lvl|lvl 100|100 уровн*|уровень 100|level 100|200 lvl|lvl 200|300 lvl|level 200|level 300|500 lvl|level 500|50 lvl|lvl 50|level 50|50 уровн*|200 уровн*|300 уровн*"
+    - "Много игр => 100 игр|200 игр|300 игр|500 игр|1000 игр|100 games|200 games|300 games|500 games|1000 games|много игр|many games|библиотек* на"
+    - "Ветеран => years of service|10 year*|15 year*|20 year*|10-летн*|15-летн*|20-летн*|с 2004|с 2005|с 2006|с 2007|с 2008|с 2009|с 2010|2004 год*|2005 год*|2006 год*|2007 год*|2008 год*|2009 год*|2010 год*|old account|старый аккаунт|старый акк|олд акк|15 лет|20 лет|15 years|20 years"
+    - "Prime => prime|прайм"
+    - "Без холда => без холда|no hold|no trade hold|холда нет|трейд открыт|trade open|обмен доступен"
+    - "Первый владелец => первый владелец|first owner|первовлад*"
+    - "Полный доступ => полный доступ|full access|родная почта|native mail|native email|первая почта"
+  regions: []
+  min_score: 1.0
+  seller_min_reviews: null
+
+pricing:
+  mode: formula
+  formula: "price * 1.8 - 500"   # 10 000 -> 17 500; 50 000 -> 89 500
+  percent: 80.0
+  multiplier: 1.8
+  tiers: []
+  min_margin: 2000
+  round_to: 100
+  round_mode: nearest
+  price_ending: null
+
+lot_template:
+  funpay_subcategory_id: null
+  title_ru: "💼 Steam | {highlights} | Полный доступ, родная почта"
+  title_en: "💼 Steam account | {highlights} | Full access"
+  description_ru: |
+    💼 Steam — аккаунт с дорогим инвентарём
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    📦 Что внутри:
+    {highlights_lines}
+
+    🛡 Гарантии магазина:
+    ✔ Аккаунт проверяется перед передачей: без VAC и трейд-банов на момент продажи
+    ✔ Полный доступ к Steam — меняете пароль, почту и Steam Guard на свои
+    ✔ Помогаем с первым входом и сменой данных
+    ✔ Сделка через FunPay — деньги под защитой площадки
+
+    🚚 Доставка:
+    • Выдача данных в чате после оплаты, обычно 10–60 минут
+    • Скриншоты инвентаря, уровня и библиотеки — по запросу в чате
+
+    💬 Напишите перед покупкой — подтвердим наличие и ответим на вопросы!
+  description_en: ""
+  amount: 1
+  deactivate_after_sale: true
+  active: true
+  fields: {}
+
+examples:
+  positive:
+    - "Steam аккаунт, инвентарь на 45 000 руб: керамбит, перчатки, 100 lvl, без холда, родная почта"
+    - "Steam account inventory $800, Dota 2 arcanas, Unusual TF2, 15 years of service, no vac ban"
+    - {text: "Steam, 200 игр, инвентарь CS2 на 12к, 50 lvl", price: 15000, attrs: {steam_inv_value: 12000}}
+  negative:
+    - "Steam аккаунт 10 игр, пустой инвентарь"
+    - "Steam аккаунт, инвентарь на 30к — есть VAC"
+    - {text: "Steam, инвентарь на 20к, нож", price: 15000, attrs: {inv_value: 0}}
+    - "Steam аккаунт с ножом в аренду"
+    - "Steam account knife, gloves — family sharing, общий аккаунт"
+    - "Steam аккаунт, инвентарь на 50к, предметы в холде, trade hold 7 дней"
+    - "Пополнение кошелька Steam по курсу, gift card"
