@@ -198,3 +198,24 @@ def test_events_and_index(client):
     assert isinstance(client.get("/api/events").json(), list)
     r = client.get("/")
     assert r.status_code == 200 and "<html" in r.text.lower()
+
+
+def test_export_market_and_orders(client):
+    client.app.state.search.run_sync()
+    r = client.get("/api/export/found.csv", params={"status": "candidate"})
+    assert r.status_code == 200 and "text/csv" in r.headers["content-type"]
+    body = r.content.decode("utf-8-sig")
+    assert body.splitlines()[0].startswith("id;profile;status;source;title;price;suggested_price")
+    assert "Chieftain" in body and "lzt.market/500" in body
+    assert client.get("/api/export/lots.csv").status_code == 200
+    assert client.get("/api/export/orders.csv").status_code == 200
+
+    f = client.get("/api/found", params={"status": "candidate", "source": "funpay"}).json()[0]
+    m = client.get(f"/api/found/{f['id']}/market").json()
+    assert m["all"]["count"] == 2 and m["all"]["min"] == 15000 and m["all"]["max"] == 20000
+    assert m["by_source"]["funpay"]["count"] == 1 and m["percentile"] == 0
+    assert client.get("/api/found/999999/market").status_code == 404
+
+    assert client.get("/api/orders").json() == []
+    st = client.get("/api/status").json()
+    assert st["orders"] == {"paid": 0, "total": 0} and "telegram" in st

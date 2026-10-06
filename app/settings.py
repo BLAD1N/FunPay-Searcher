@@ -8,12 +8,35 @@ from typing import Optional
 import yaml
 from pydantic import BaseModel, Field
 
-ROOT = Path(__file__).resolve().parent.parent
+import sys
+
+if getattr(sys, "frozen", False):
+    # Сборка PyInstaller: конфиг и данные лежат рядом с .exe, а ресурсы — внутри архива (_MEIPASS)
+    ROOT = Path(sys.executable).resolve().parent
+    BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", ROOT))
+else:
+    ROOT = Path(__file__).resolve().parent.parent
+    BUNDLE_DIR = ROOT
 CONFIG_DIR = ROOT / "config"
 PROFILES_DIR = CONFIG_DIR / "profiles"
 DATA_DIR = ROOT / "data"
 SETTINGS_FILE = CONFIG_DIR / "settings.yaml"
 SETTINGS_EXAMPLE = CONFIG_DIR / "settings.example.yaml"
+BUNDLED_CONFIG_DIR = BUNDLE_DIR / "config"   # эталонные config/ из сборки (копируются при первом запуске)
+
+
+def ensure_user_dirs() -> None:
+    """При первом запуске (особенно из .exe) создаёт config/, профили и data/ рядом с программой."""
+    import shutil
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+    if BUNDLED_CONFIG_DIR != CONFIG_DIR and BUNDLED_CONFIG_DIR.exists():
+        if not SETTINGS_EXAMPLE.exists() and (BUNDLED_CONFIG_DIR / "settings.example.yaml").exists():
+            shutil.copy(BUNDLED_CONFIG_DIR / "settings.example.yaml", SETTINGS_EXAMPLE)
+        src_profiles = BUNDLED_CONFIG_DIR / "profiles"
+        if src_profiles.exists() and not any(PROFILES_DIR.glob("*.yaml")):
+            for f in src_profiles.glob("*.yaml"):
+                shutil.copy(f, PROFILES_DIR / f.name)
 
 
 class FunPaySettings(BaseModel):

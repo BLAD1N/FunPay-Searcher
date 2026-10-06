@@ -143,7 +143,8 @@ class Storage:
             q += f" AND status IN ({','.join('?' * len(st))})"; args.extend(st)
         if source:
             q += " AND source=?"; args.append(source)
-        allowed = {"score DESC, last_seen DESC", "price ASC", "price DESC", "last_seen DESC", "first_seen DESC"}
+        allowed = {"score DESC, last_seen DESC", "price ASC", "price DESC", "last_seen DESC", "first_seen DESC",
+                   "suggested_price DESC", "suggested_price ASC"}
         q += f" ORDER BY {order if order in allowed else 'score DESC, last_seen DESC'} LIMIT ? OFFSET ?"
         args.extend([limit, offset])
         with self._lock:

@@ -20,6 +20,9 @@ from .services.search import SearchService
 from .settings import Settings
 
 STATIC_DIR = Path(__file__).resolve().parent / "web" / "static"
+if not STATIC_DIR.exists():  # сборка PyInstaller
+    from .settings import BUNDLE_DIR
+    STATIC_DIR = BUNDLE_DIR / "app" / "web" / "static"
 log = logging.getLogger("app")
 
 
@@ -277,8 +280,9 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
     def list_found(profile_id: Optional[str] = None, status: Optional[str] = None, source: Optional[str] = None,
                    limit: int = Query(200, le=5000), offset: int = 0, order: str = "score"):
         statuses = [s for s in (status or "").split(",") if s] or None
-        order_sql = {"score": "score DESC, last_seen DESC", "price_asc": "price ASC", "price_desc": "price DESC",
-                     "recent": "last_seen DESC", "first_seen": "first_seen DESC"}.get(order, "score DESC, last_seen DESC")
+        order_sql = {"score": "score DESC, last_seen DESC", "price": "price ASC", "price_asc": "price ASC",
+                     "price_desc": "price DESC", "recent": "last_seen DESC", "first_seen": "first_seen DESC",
+                     "suggested_price": "suggested_price DESC"}.get(order, "score DESC, last_seen DESC")
         items = ctx.storage.list_found(profile_id=profile_id, status=statuses, source=source,
                                        limit=limit, offset=offset, order=order_sql)
         return [_found_out(f) for f in items]

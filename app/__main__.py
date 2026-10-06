@@ -8,7 +8,7 @@ import webbrowser
 
 import uvicorn
 
-from .settings import DATA_DIR, Settings
+from .settings import DATA_DIR, Settings, ensure_user_dirs
 
 
 def main() -> None:
@@ -19,10 +19,10 @@ def main() -> None:
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
+    ensure_user_dirs()
     settings = Settings.load()
     host = args.host or settings.ui.host
     port = args.port or settings.ui.port
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
         level=logging.DEBUG if args.debug else logging.INFO,
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
