@@ -14,12 +14,13 @@ from .search import SearchService
 
 class MonitorService:
     def __init__(self, ctx: AppContext, publisher: PublisherService, search: SearchService,
-                 orders=None, raiser=None):
+                 orders=None, raiser=None, repricer=None):
         self.ctx = ctx
         self.publisher = publisher
         self.search = search
         self.orders = orders      # OrdersService (опционально)
         self.raiser = raiser      # RaiserService (опционально)
+        self.repricer = repricer  # RepricerService (опционально)
         self._last_orders: Optional[float] = None
         self._last_raise: Optional[float] = None
         self._stop = threading.Event()
@@ -115,6 +116,12 @@ class MonitorService:
             self.last_run = utcnow().isoformat()
             self.last_result = {"checked": checked, "unavailable": unavailable}
             self.ctx.log("monitor", f"проверка доступности: проверено {checked}, недоступно {unavailable}")
+            # 3) цены исходников могли измениться — пересчитываем наши лоты
+            if self.repricer:
+                try:
+                    self.repricer.run()
+                except Exception as e:  # noqa: BLE001
+                    self.ctx.log("reprice", f"ошибка репрайсинга: {e}", level="error")
             return self.last_result
         finally:
             self._busy.release()

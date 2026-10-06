@@ -60,13 +60,13 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         raiser = RaiserService(ctx)
     except Exception as e:  # noqa: BLE001 — модули могут отсутствовать в урезанной сборке
         log.warning("сервисы заказов/поднятия недоступны: %s", e)
-    monitor = MonitorService(ctx, publisher, search, orders=orders, raiser=raiser)
     repricer = autoreply = None
     try:
         from .services.repricer import RepricerService
         repricer = RepricerService(ctx, publisher)
     except Exception as e:  # noqa: BLE001
         log.warning("сервис репрайсинга недоступен: %s", e)
+    monitor = MonitorService(ctx, publisher, search, orders=orders, raiser=raiser, repricer=repricer)
     try:
         from .services.autoreply import AutoReplyService
         autoreply = AutoReplyService(ctx)
@@ -75,7 +75,7 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
 
     def _after_search_finished(stats) -> None:
         """После поиска цены исходников обновлены — пересчитываем наши лоты."""
-        if repricer and ctx.settings.monitor.auto_reprice:
+        if repricer:  # в режиме «только уведомлять» run() сам не меняет цены
             try:
                 repricer.run()
             except Exception as e:  # noqa: BLE001
@@ -407,7 +407,7 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
     def update_lot(lot_id: int, body: dict):
         lot = _get_lot(lot_id)
         try:
-            return _lot_out(publisher.update(lot, body or {}))
+            return _lot_out(publisher.update(lot, body or {}, sync_source_price=True))
         except ValueError as e:
             raise HTTPException(400, str(e))
 
@@ -637,6 +637,8 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
     @app.get("/api/found/{found_id}/history")
     def found_history(found_id: int):
         f = _get_found(found_id)
+        if repricer:
+            return repricer.price_trend(f.id)
         hist = ctx.storage.price_history(f.id)
         first = hist[0]["price"] if hist else f.listing.price
         last = hist[-1]["price"] if hist else f.listing.price

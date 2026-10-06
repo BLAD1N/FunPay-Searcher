@@ -144,8 +144,13 @@ class PublisherService:
             self.ctx.log("lots", f"ошибка публикации лота #{lot.id}: {e}", level="error")
         return self.ctx.storage.save_lot(lot)
 
-    def update(self, lot: OurLot, changes: dict) -> OurLot:
+    def update(self, lot: OurLot, changes: dict, sync_source_price: bool = False) -> OurLot:
         self._apply_overrides(lot, changes)
+        if sync_source_price and changes.get("price") is not None:
+            # ручная правка цены = пользователь учёл текущую цену исходника; репрайсер не должен считать лот устаревшим
+            found = self.ctx.storage.get_found(lot.found_id)
+            if found and found.listing.price > 0:
+                lot.source_price = found.listing.price
         # снятый лот не трогаем на FunPay: правки уедут при активации (set_active отправляет все поля)
         if lot.status == LotStatus.ACTIVE and lot.funpay_lot_id:
             try:
