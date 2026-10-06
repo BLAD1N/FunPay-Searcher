@@ -219,3 +219,14 @@ def test_export_market_and_orders(client):
     assert client.get("/api/orders").json() == []
     st = client.get("/api/status").json()
     assert st["orders"] == {"paid": 0, "total": 0} and "telegram" in st
+
+
+def test_seller_and_history(client):
+    client.app.state.search.run_sync()
+    f = client.get("/api/found", params={"status": "candidate", "source": "funpay"}).json()[0]
+    h = client.get(f"/api/found/{f['id']}/history").json()
+    assert h["history"] and h["first"] == 15000 and h["change_percent"] == 0.0
+    client.fake_funpay.get_seller = lambda sid: {"id": sid, "name": "seller1", "reviews": 50, "lots": []}
+    r = client.get("/api/funpay/seller", params={"url": "https://funpay.com/users/10/"}).json()
+    assert r["id"] == "10" and r["lots_count"] == 0
+    assert client.get("/api/funpay/seller").status_code == 400

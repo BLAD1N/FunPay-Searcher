@@ -560,6 +560,38 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
             "cheaper_than_suggested": sum(1 for p_ in all_prices if f.suggested_price and p_ < f.suggested_price),
         }
 
+    # ------------------------------------------------------- seller / history
+    @app.get("/api/funpay/seller")
+    def funpay_seller(seller_id: Optional[str] = None, url: Optional[str] = None):
+        """Карточка продавца FunPay: имя, отзывы, его лоты (для оценки надёжности исходника)."""
+        _require_funpay()
+        sid = seller_id
+        if not sid and url:
+            import re
+            m = re.search(r"/users/(\d+)", url)
+            sid = m.group(1) if m else None
+        if not sid:
+            raise HTTPException(400, "укажите seller_id или url продавца FunPay")
+        try:
+            info = ctx.funpay.get_seller(sid)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(502, f"FunPay: {e}")
+        if not info:
+            raise HTTPException(404, "продавец не найден")
+        lots = info.get("lots") or []
+        info["lots"] = [l.model_dump(mode="json") if hasattr(l, "model_dump") else l for l in lots][:200]
+        info["lots_count"] = len(lots)
+        return info
+
+    @app.get("/api/found/{found_id}/history")
+    def found_history(found_id: int):
+        f = _get_found(found_id)
+        hist = ctx.storage.price_history(f.id)
+        first = hist[0]["price"] if hist else f.listing.price
+        last = hist[-1]["price"] if hist else f.listing.price
+        return {"history": hist, "first": first, "last": last,
+                "change_percent": round((last - first) / first * 100, 1) if first else 0.0}
+
     # ----------------------------------------------------------- utilities
     @app.get("/api/events")
     def events(limit: int = Query(200, le=2000)):
