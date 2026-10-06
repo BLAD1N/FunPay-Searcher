@@ -3,9 +3,7 @@ venv/
 __pycache__/
 *.pyc
 .pytest_cache/
-data/*.db
-data/*.db-journal
-data/*.log
+data/
 config/settings.yaml
 *.spec
 build/
