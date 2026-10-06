@@ -301,8 +301,6 @@ def test_profile_editor_criteria_and_tester(page: Page, e2e_app: E2EApp):
     assert p["criteria"]["must_any"][:2] == ["все топы", "chieftain|чифтейн"]
 
 
-@pytest.mark.xfail(strict=False, reason="тестер критериев не выводит suggested_price из ответа /api/matching/test "
-                                       "(app.js, pageProfileEditor -> tabCriteria -> runTest)")
 def test_profile_tester_shows_suggested_price(page: Page, e2e_app: E2EApp):
     _open_criteria_tab(page, e2e_app)
     tester, data = _run_tester(page, "все топы чифтейн", "10000")
