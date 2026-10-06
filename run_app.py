@@ -1,4 +1,5 @@
 """Обёртка для PyInstaller: эквивалент `python -m app`."""
+
 import multiprocessing
 
 from app.__main__ import main

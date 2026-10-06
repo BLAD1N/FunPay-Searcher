@@ -4,6 +4,7 @@
 браузер общий на сессию. Селекторы — по видимому тексту и ролям, плюс устойчивые классы
 компонентов (``found-card``, ``chip``, ``avail`` …). Вместо пауз — ожидания ``expect``.
 """
+
 from __future__ import annotations
 
 import re
@@ -23,6 +24,7 @@ if not find_chromium():
 # ----------------------------------------------------------------------------
 # помощники
 # ----------------------------------------------------------------------------
+
 
 def open_route(page: Page, app: E2EApp, route: str, heading: str) -> None:
     """Переход на hash-маршрут SPA и ожидание заголовка страницы."""
@@ -47,6 +49,7 @@ def row_status(row):
 # ----------------------------------------------------------------------------
 # 1. Панель
 # ----------------------------------------------------------------------------
+
 
 def test_dashboard_search_run(page: Page, e2e_app: E2EApp):
     open_route(page, e2e_app, "#/dashboard", "Панель")
@@ -90,6 +93,7 @@ def test_dashboard_search_run(page: Page, e2e_app: E2EApp):
 # ----------------------------------------------------------------------------
 # 2. Найдено
 # ----------------------------------------------------------------------------
+
 
 def test_found_page_filters_and_actions(page: Page, e2e_app: E2EApp):
     e2e_app.run_search()
@@ -152,6 +156,7 @@ def test_found_page_filters_and_actions(page: Page, e2e_app: E2EApp):
 # 3. Предпросмотр лота -> черновик -> публикация
 # ----------------------------------------------------------------------------
 
+
 def test_preview_modal_draft_and_publish(page: Page, e2e_app: E2EApp):
     e2e_app.run_search()
     open_route(page, e2e_app, "#/found", "Найдено")
@@ -202,6 +207,7 @@ def test_preview_modal_draft_and_publish(page: Page, e2e_app: E2EApp):
 # 4. Лоты: проверка исходника, активация, удаление
 # ----------------------------------------------------------------------------
 
+
 def test_lots_check_source_activate_delete(page: Page, e2e_app: E2EApp):
     e2e_app.run_search()
     found = e2e_app.api.get("/api/found", params={"status": "candidate", "source": "funpay"}).json()[0]
@@ -209,7 +215,7 @@ def test_lots_check_source_activate_delete(page: Page, e2e_app: E2EApp):
     assert r.status_code == 201, r.text
     lot = r.json()
     assert lot["status"] == "active"
-    e2e_app.funpay.available["1"] = False   # исходник «продан»
+    e2e_app.funpay.available["1"] = False  # исходник «продан»
 
     open_route(page, e2e_app, "#/lots", "Лоты")
     rows = page.locator("#main table tbody tr")
@@ -250,6 +256,7 @@ def test_lots_check_source_activate_delete(page: Page, e2e_app: E2EApp):
 # ----------------------------------------------------------------------------
 # 5. Профили: редактор, критерии, тестер
 # ----------------------------------------------------------------------------
+
 
 def _open_criteria_tab(page: Page, app: E2EApp):
     open_route(page, app, "#/profiles", "Профили")
@@ -306,12 +313,15 @@ def test_profile_tester_shows_suggested_price(page: Page, e2e_app: E2EApp):
     tester, data = _run_tester(page, "все топы чифтейн", "10000")
     assert data["suggested_price"] == 19000
     # короткий таймаут: результат уже отрисован, нечего ждать полные 10 с
-    expect(tester.locator(".result-box"), "в результате тестера должна быть наша цена").to_contain_text("19 000", timeout=1500)
+    expect(tester.locator(".result-box"), "в результате тестера должна быть наша цена").to_contain_text(
+        "19 000", timeout=1500
+    )
 
 
 # ----------------------------------------------------------------------------
 # 6. Настройки
 # ----------------------------------------------------------------------------
+
 
 def test_settings_save_and_auth_check(page: Page, e2e_app: E2EApp):
     open_route(page, e2e_app, "#/settings", "Настройки")
@@ -329,7 +339,7 @@ def test_settings_save_and_auth_check(page: Page, e2e_app: E2EApp):
     s = e2e_app.api.get("/api/settings").json()
     assert s["funpay"]["request_delay"] == 2.5
     assert s["funpay"]["golden_key_set"] is True and s["lolz"]["token_set"] is True
-    assert e2e_app.ctx.settings.funpay.golden_key == "test-key"      # пустое поле не затёрло ключ
+    assert e2e_app.ctx.settings.funpay.golden_key == "test-key"  # пустое поле не затёрло ключ
     assert e2e_app.ctx.settings.lolz.token == "test-token"
     # страница перерисована с сохранёнными значениями
     expect(funpay_card.locator(".field", has_text="Пауза между запросами").locator("input")).to_have_value("2.5")
@@ -351,6 +361,7 @@ def test_settings_save_and_auth_check(page: Page, e2e_app: E2EApp):
 # ----------------------------------------------------------------------------
 # 7. Журнал
 # ----------------------------------------------------------------------------
+
 
 def test_log_page_shows_search_events(page: Page, e2e_app: E2EApp):
     e2e_app.run_search()

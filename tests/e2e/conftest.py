@@ -6,6 +6,7 @@
 Браузер один на сессию, приложение и контекст браузера — свои для каждого теста.
 Playwright импортируется лениво (только в фикстурах), чтобы без него сбор тестов не падал.
 """
+
 from __future__ import annotations
 
 import glob
@@ -54,6 +55,7 @@ def find_chromium() -> str | None:
 # Фейковые источники (как в tests/test_api.py)
 # ----------------------------------------------------------------------------
 
+
 class FakeSource:
     """Источник, возвращающий заранее заданные объявления; запоминает вызовы публикации."""
 
@@ -62,16 +64,16 @@ class FakeSource:
         self.listings = listings
         self.created: list[dict] = []
         self.active_calls: list[tuple] = []
-        self.available = {l.source_id: True for l in listings}
-        self.delay = 0.0   # искусственная длительность поиска, сек (чтобы UI успел показать прогресс)
+        self.available = {x.source_id: True for x in listings}
+        self.delay = 0.0  # искусственная длительность поиска, сек (чтобы UI успел показать прогресс)
 
     def search(self, profile, limit=None):
         if self.delay:
             time.sleep(self.delay)
-        return [l.model_copy(update={"game": profile.game}) for l in self.listings]
+        return [lot_.model_copy(update={"game": profile.game}) for lot_ in self.listings]
 
     def get_listing(self, source_id):
-        return next((l for l in self.listings if l.source_id == source_id and self.available.get(source_id)), None)
+        return next((x for x in self.listings if x.source_id == source_id and self.available.get(source_id)), None)
 
     def is_available(self, source_id):
         return self.available.get(source_id, False)
@@ -84,8 +86,9 @@ class FakeSource:
         return [148]
 
     def categories(self):
-        return [{"id": 1, "name": "World of Tanks",
-                 "subcategories": [{"id": 148, "name": "Аккаунты", "type": "common"}]}]
+        return [
+            {"id": 1, "name": "World of Tanks", "subcategories": [{"id": 148, "name": "Аккаунты", "type": "common"}]}
+        ]
 
     def create_lot(self, subcategory_id, **kw):
         self.created.append({"subcategory_id": subcategory_id, **kw})
@@ -100,38 +103,81 @@ class FakeSource:
 
 def make_test_profile() -> Profile:
     return Profile(
-        id="wot_test", name="WoT тест", game="wot", region="RU",
-        sources={"funpay": {"enabled": True, "subcategory_id": 148},
-                 "lolz": {"enabled": True, "category": "world-of-tanks"}},
-        criteria={"price": {"min": 1000, "max": 50000}, "must_any": ["все топы", "chieftain|чифтейн"],
-                  "exclude": ["бан"], "highlights": ["Chieftain", "Об. 279"]},
+        id="wot_test",
+        name="WoT тест",
+        game="wot",
+        region="RU",
+        sources={
+            "funpay": {"enabled": True, "subcategory_id": 148},
+            "lolz": {"enabled": True, "category": "world-of-tanks"},
+        },
+        criteria={
+            "price": {"min": 1000, "max": 50000},
+            "must_any": ["все топы", "chieftain|чифтейн"],
+            "exclude": ["бан"],
+            "highlights": ["Chieftain", "Об. 279"],
+        },
         pricing={"mode": "formula", "formula": "price * 2 - 1000", "round_to": 100},
         lot_template={"title_ru": "{game} | {highlights} | {region}", "fields": {"fields[server]": "ru"}},
     )
 
 
 def make_fake_sources() -> tuple[FakeSource, FakeSource]:
-    funpay = FakeSource("funpay", [
-        Listing(source="funpay", source_id="1", url="https://funpay.com/lots/offer?id=1",
-                title="Аккаунт WoT все топы, Chieftain, Об. 279", price=15000, region="RU",
-                seller_name="seller1", seller_url="https://funpay.com/users/10/",
-                attributes={"subcategory_id": 148, "seller_reviews": 50}),
-        Listing(source="funpay", source_id="2", url="https://funpay.com/lots/offer?id=2",
-                title="Аккаунт с баном", price=15000, region="RU", attributes={"subcategory_id": 148}),
-        Listing(source="funpay", source_id="3", url="https://funpay.com/lots/offer?id=3",
-                title="все топы", price=99999, region="RU", attributes={"subcategory_id": 148}),
-    ])
-    lolz = FakeSource("lolz", [
-        Listing(source="lolz", source_id="500", url="https://lzt.market/500",
-                title="WoT чифтейн, 60 танков 10 лвл", price=20000,
-                seller_name="lz", seller_url="https://lolz.live/members/5/"),
-    ])
+    funpay = FakeSource(
+        "funpay",
+        [
+            Listing(
+                source="funpay",
+                source_id="1",
+                url="https://funpay.com/lots/offer?id=1",
+                title="Аккаунт WoT все топы, Chieftain, Об. 279",
+                price=15000,
+                region="RU",
+                seller_name="seller1",
+                seller_url="https://funpay.com/users/10/",
+                attributes={"subcategory_id": 148, "seller_reviews": 50},
+            ),
+            Listing(
+                source="funpay",
+                source_id="2",
+                url="https://funpay.com/lots/offer?id=2",
+                title="Аккаунт с баном",
+                price=15000,
+                region="RU",
+                attributes={"subcategory_id": 148},
+            ),
+            Listing(
+                source="funpay",
+                source_id="3",
+                url="https://funpay.com/lots/offer?id=3",
+                title="все топы",
+                price=99999,
+                region="RU",
+                attributes={"subcategory_id": 148},
+            ),
+        ],
+    )
+    lolz = FakeSource(
+        "lolz",
+        [
+            Listing(
+                source="lolz",
+                source_id="500",
+                url="https://lzt.market/500",
+                title="WoT чифтейн, 60 танков 10 лвл",
+                price=20000,
+                seller_name="lz",
+                seller_url="https://lolz.live/members/5/",
+            ),
+        ],
+    )
     return funpay, lolz
 
 
 # ----------------------------------------------------------------------------
 # Сервер uvicorn в фоновом потоке
 # ----------------------------------------------------------------------------
+
 
 def free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -144,8 +190,10 @@ class UvicornThread:
 
     def __init__(self, app: Any, port: int):
         import uvicorn
-        self.config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning",
-                                     log_config=None, access_log=False)
+
+        self.config = uvicorn.Config(
+            app, host="127.0.0.1", port=port, log_level="warning", log_config=None, access_log=False
+        )
         self.server = uvicorn.Server(self.config)
         self.thread = threading.Thread(target=self.server.run, name="e2e-uvicorn", daemon=True)
 
@@ -199,6 +247,7 @@ class E2EApp:
 # Фикстуры
 # ----------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="session")
 def chromium_path() -> str:
     path = find_chromium()
@@ -210,15 +259,17 @@ def chromium_path() -> str:
 @pytest.fixture(scope="session")
 def browser(chromium_path):
     """Один headless Chromium на всю сессию тестов (E2E_HEADED=1 — с окном и замедлением)."""
-    sync_api = pytest.importorskip("playwright.sync_api", reason="Playwright для Python не установлен",
-                                   exc_type=ImportError)
+    sync_api = pytest.importorskip(
+        "playwright.sync_api", reason="Playwright для Python не установлен", exc_type=ImportError
+    )
     sync_api.expect.set_options(timeout=DEFAULT_TIMEOUT_MS)
     headed = os.environ.get("E2E_HEADED") == "1"
     with sync_api.sync_playwright() as pw:
         try:
-            browser = pw.chromium.launch(headless=not headed, executable_path=chromium_path,
-                                         slow_mo=250 if headed else 0)
-        except Exception as e:  # noqa: BLE001 — нет системных библиотек и т.п.: CI без браузера остаётся зелёным
+            browser = pw.chromium.launch(
+                headless=not headed, executable_path=chromium_path, slow_mo=250 if headed else 0
+            )
+        except Exception as e:
             pytest.skip(f"не удалось запустить Chromium ({chromium_path}): {e}")
         yield browser
         browser.close()
@@ -227,7 +278,7 @@ def browser(chromium_path):
 @pytest.fixture()
 def e2e_app(tmp_path: Path, monkeypatch) -> E2EApp:
     """Реальное приложение (create_app) с фейковыми источниками, временной базой и профилями."""
-    monkeypatch.setattr(Settings, "save", lambda self, path=None: None)   # не трогаем config/settings.yaml
+    monkeypatch.setattr(Settings, "save", lambda self, path=None: None)  # не трогаем config/settings.yaml
     settings = Settings()
     settings.funpay.golden_key = "test-key"
     settings.lolz.token = "test-token"
@@ -289,7 +340,7 @@ def page(browser, e2e_app: E2EApp, request, tmp_path: Path):
             page.screenshot(path=str(shot), full_page=True)
             print(f"\n[e2e] скриншот страницы при падении: {shot}")
             print("[e2e] текст страницы (#main):\n" + page.locator("#main").inner_text(timeout=2000)[:1500])
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"[e2e] не удалось снять диагностику страницы: {e}")
         if errors:
             print("[e2e] ошибки консоли браузера:\n  " + "\n  ".join(errors))

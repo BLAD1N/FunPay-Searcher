@@ -1,10 +1,12 @@
 """HTTP API + раздача веб-интерфейса (FastAPI)."""
+
 from __future__ import annotations
 
+import contextlib
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -23,6 +25,7 @@ from .settings import Settings
 STATIC_DIR = Path(__file__).resolve().parent / "web" / "static"
 if not STATIC_DIR.exists():  # сборка PyInstaller
     from .settings import BUNDLE_DIR
+
     STATIC_DIR = BUNDLE_DIR / "app" / "web" / "static"
 log = logging.getLogger("app")
 
@@ -30,8 +33,8 @@ log = logging.getLogger("app")
 # Модели тел запросов объявлены на уровне модуля: при `from __future__ import annotations`
 # FastAPI не может разрешить аннотации на локальные классы внутри create_app().
 class SearchBody(BaseModel):
-    profile_ids: Optional[list[str]] = None
-    sources: Optional[list[str]] = None
+    profile_ids: list[str] | None = None
+    sources: list[str] | None = None
 
 
 class PricingPreview(BaseModel):
@@ -40,16 +43,16 @@ class PricingPreview(BaseModel):
 
 
 class MatchingTest(BaseModel):
-    profile: Optional[Profile] = None
-    profile_id: Optional[str] = None
-    criteria: Optional[Criteria] = None
+    profile: Profile | None = None
+    profile_id: str | None = None
+    criteria: Criteria | None = None
     text: str = ""
     price: float = 0
-    region: Optional[str] = None
+    region: str | None = None
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 
-def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> FastAPI:
+def create_app(ctx: AppContext | None = None, start_monitor: bool = True) -> FastAPI:
     ctx = ctx or AppContext()
     search = SearchService(ctx)
     publisher = PublisherService(ctx)
@@ -57,21 +60,24 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
     try:
         from .services.orders import OrdersService
         from .services.raiser import RaiserService
+
         orders = OrdersService(ctx, ctx.notifier)
         raiser = RaiserService(ctx)
-    except Exception as e:  # noqa: BLE001 — модули могут отсутствовать в урезанной сборке
+    except Exception as e:
         log.warning("сервисы заказов/поднятия недоступны: %s", e)
     repricer = autoreply = None
     try:
         from .services.repricer import RepricerService
+
         repricer = RepricerService(ctx, publisher)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         log.warning("сервис репрайсинга недоступен: %s", e)
     monitor = MonitorService(ctx, publisher, search, orders=orders, raiser=raiser, repricer=repricer)
     try:
         from .services.autoreply import AutoReplyService
+
         autoreply = AutoReplyService(ctx)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         log.warning("автоответчик недоступен: %s", e)
 
     def _after_search_finished(stats) -> None:
@@ -79,7 +85,7 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         if repricer:  # в режиме «только уведомлять» run() сам не меняет цены
             try:
                 repricer.run()
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 ctx.log("reprice", f"ошибка репрайсинга: {e}", level="error")
 
     search.on_finished = _after_search_finished
@@ -90,11 +96,11 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
             for f in new_found:
                 try:
                     publisher.create(f, publish=True)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     ctx.log("lots", f"автопубликация {f.listing.key}: {e}", level="error")
         try:
             ctx.notify(ctx.notifier.format_candidates(profile.name, new_found), kind="candidates")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             ctx.log("search", f"уведомление о находках: {e}", level="warning")
 
     search.on_new_candidates = _after_search
@@ -114,10 +120,8 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         yield
         monitor.stop()
         if autoreply:
-            try:
+            with contextlib.suppress(Exception):
                 autoreply.stop()
-            except Exception:  # noqa: BLE001
-                pass
 
     app.router.lifespan_context = _lifespan
 
@@ -128,9 +132,13 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
             origin = request.headers.get("origin") or request.headers.get("referer")
             if origin:
                 from urllib.parse import urlsplit
+
                 o = urlsplit(origin)
-                allowed_hosts = {request.headers.get("host", ""), f"{request.url.hostname}:{request.url.port}",
-                                 request.url.hostname or ""}
+                allowed_hosts = {
+                    request.headers.get("host", ""),
+                    f"{request.url.hostname}:{request.url.port}",
+                    request.url.hostname or "",
+                }
                 if o.netloc and o.netloc not in allowed_hosts and o.hostname not in ("127.0.0.1", "localhost"):
                     return JSONResponse(status_code=403, content={"detail": "запрос с чужого источника отклонён"})
         return await call_next(request)
@@ -148,17 +156,18 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         d["profile_name"] = _profile_names().get(f.profile_id, f.profile_id)
         return d
 
-    def _lot_out(l: OurLot) -> dict:
-        d = l.model_dump(mode="json")
-        found = ctx.storage.get_found(l.found_id)
+    def _lot_out(lot_: OurLot) -> dict:
+        d = lot_.model_dump(mode="json")
+        found = ctx.storage.get_found(lot_.found_id)
         d["found"] = found.model_dump(mode="json") if found else None
-        d["profile_name"] = _profile_names().get(l.profile_id, l.profile_id)
+        d["profile_name"] = _profile_names().get(lot_.profile_id, lot_.profile_id)
         return d
 
     _names_cache: dict[str, Any] = {"ts": 0.0, "names": {}}
 
     def _profile_names() -> dict[str, str]:
         import time
+
         if time.time() - _names_cache["ts"] > 5:
             _names_cache["names"] = {p.id: p.name for p in ctx.profiles.list()}
             _names_cache["ts"] = time.time()
@@ -171,10 +180,10 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         return f
 
     def _get_lot(lot_id: int) -> OurLot:
-        l = ctx.storage.get_lot(lot_id)
-        if not l:
+        lot_ = ctx.storage.get_lot(lot_id)
+        if not lot_:
             raise HTTPException(404, "лот не найден")
-        return l
+        return lot_
 
     def _require_funpay():
         if not ctx.settings.funpay.golden_key:
@@ -198,8 +207,10 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
             "monitor": monitor.status(),
             "auth": ctx.auth_state,
             "auto_publish": ctx.settings.funpay.auto_publish,
-            "orders": {"paid": len(ctx.storage.list_orders(status=["paid"], limit=100000)),
-                       "total": len(ctx.storage.list_orders(limit=100000))},
+            "orders": {
+                "paid": len(ctx.storage.list_orders(status=["paid"], limit=100000)),
+                "total": len(ctx.storage.list_orders(limit=100000)),
+            },
             "raise": raiser.status() if raiser else None,
             "reprice": repricer.status() if repricer else None,
             "autoreply": autoreply.status() if autoreply else None,
@@ -222,14 +233,14 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
             merged[sec].pop(key + "_set", None)
         try:
             new_settings = Settings.model_validate(merged)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(400, f"ошибка в настройках: {e}")
+        except Exception as e:
+            raise HTTPException(400, f"ошибка в настройках: {e}") from e
         ctx.apply_settings(new_settings)
         ctx.log("settings", "настройки сохранены")
         return ctx.settings.masked()
 
     @app.post("/api/auth/check")
-    def auth_check(body: Optional[dict] = None):
+    def auth_check(body: dict | None = None):
         which = (body or {}).get("sources")
         return ctx.check_auth(which)
 
@@ -243,7 +254,7 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         try:
             return ctx.profiles.get(profile_id).model_dump(mode="json")
         except KeyError:
-            raise HTTPException(404, "профиль не найден")
+            raise HTTPException(404, "профиль не найден") from None
 
     @app.post("/api/profiles", status_code=201)
     def create_profile(profile: Profile):
@@ -253,11 +264,11 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         except KeyError:
             pass
         except ValueError as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
         try:
             ctx.profiles.save(profile)
         except ValueError as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
         ctx.log("profiles", f"создан профиль {profile.id}")
         return profile.model_dump(mode="json")
 
@@ -268,7 +279,7 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         try:
             ctx.profiles.save(profile)
         except ValueError as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
         ctx.log("profiles", f"профиль {profile.id} сохранён")
         return profile.model_dump(mode="json")
 
@@ -277,7 +288,7 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         try:
             ctx.profiles.delete(profile_id)
         except ValueError as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
         ctx.log("profiles", f"профиль {profile_id} удалён")
         return {"ok": True}
 
@@ -286,7 +297,7 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         try:
             p = ctx.profiles.get(profile_id)
         except KeyError:
-            raise HTTPException(404, "профиль не найден")
+            raise HTTPException(404, "профиль не найден") from None
         new_id = f"{p.id}_copy"
         i = 2
         while True:
@@ -302,7 +313,7 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
 
     # ------------------------------------------------------------- search
     @app.post("/api/search")
-    def start_search(body: Optional[SearchBody] = None):
+    def start_search(body: SearchBody | None = None):
         body = body or SearchBody()
         if body.sources:
             bad = [s for s in body.sources if s not in ("funpay", "lolz")]
@@ -323,14 +334,27 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
 
     # -------------------------------------------------------------- found
     @app.get("/api/found")
-    def list_found(profile_id: Optional[str] = None, status: Optional[str] = None, source: Optional[str] = None,
-                   limit: int = Query(200, le=5000), offset: int = 0, order: str = "score"):
+    def list_found(
+        profile_id: str | None = None,
+        status: str | None = None,
+        source: str | None = None,
+        limit: int = Query(200, le=5000),
+        offset: int = 0,
+        order: str = "score",
+    ):
         statuses = [s for s in (status or "").split(",") if s] or None
-        order_sql = {"score": "score DESC, last_seen DESC", "price": "price ASC", "price_asc": "price ASC",
-                     "price_desc": "price DESC", "recent": "last_seen DESC", "first_seen": "first_seen DESC",
-                     "suggested_price": "suggested_price DESC"}.get(order, "score DESC, last_seen DESC")
-        items = ctx.storage.list_found(profile_id=profile_id, status=statuses, source=source,
-                                       limit=limit, offset=offset, order=order_sql)
+        order_sql = {
+            "score": "score DESC, last_seen DESC",
+            "price": "price ASC",
+            "price_asc": "price ASC",
+            "price_desc": "price DESC",
+            "recent": "last_seen DESC",
+            "first_seen": "first_seen DESC",
+            "suggested_price": "suggested_price DESC",
+        }.get(order, "score DESC, last_seen DESC")
+        items = ctx.storage.list_found(
+            profile_id=profile_id, status=statuses, source=source, limit=limit, offset=offset, order=order_sql
+        )
         return [_found_out(f) for f in items]
 
     @app.get("/api/found/{found_id}")
@@ -343,7 +367,7 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         try:
             st = FoundStatus(body.get("status"))
         except ValueError:
-            raise HTTPException(400, "неизвестный статус")
+            raise HTTPException(400, "неизвестный статус") from None
         ctx.storage.set_found_status(f.id, st)
         return _found_out(_get_found(found_id))
 
@@ -361,8 +385,8 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         f = _get_found(found_id)
         try:
             available = ctx.source(f.listing.source).is_available(f.listing.source_id)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(502, f"не удалось проверить: {e}")
+        except Exception as e:
+            raise HTTPException(502, f"не удалось проверить: {e}") from e
         ctx.storage.set_found_availability(f.id, available)
         if available is False:
             ctx.storage.set_found_status(f.id, FoundStatus.SOLD)
@@ -370,17 +394,17 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         return {"available": available, "checked_at": f.last_checked.isoformat() if f.last_checked else None}
 
     @app.post("/api/found/{found_id}/preview-lot")
-    def preview_lot(found_id: int, body: Optional[dict] = None):
+    def preview_lot(found_id: int, body: dict | None = None):
         f = _get_found(found_id)
         try:
             return publisher.preview(f, body or None).model_dump(mode="json")
         except KeyError:
-            raise HTTPException(404, f"профиль {f.profile_id} не найден")
+            raise HTTPException(404, f"профиль {f.profile_id} не найден") from None
         except ValueError as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
 
     @app.post("/api/found/{found_id}/create-lot", status_code=201)
-    def create_lot(found_id: int, body: Optional[dict] = None):
+    def create_lot(found_id: int, body: dict | None = None):
         f = _get_found(found_id)
         body = body or {}
         publish = bool(body.pop("publish", False))
@@ -389,16 +413,16 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         try:
             lot = publisher.create(f, body, publish=publish)
         except KeyError:
-            raise HTTPException(404, f"профиль {f.profile_id} не найден")
+            raise HTTPException(404, f"профиль {f.profile_id} не найден") from None
         except (ValueError, RuntimeError) as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
         return _lot_out(lot)
 
     # --------------------------------------------------------------- lots
     @app.get("/api/lots")
-    def list_lots(status: Optional[str] = None, profile_id: Optional[str] = None, limit: int = Query(500, le=5000)):
+    def list_lots(status: str | None = None, profile_id: str | None = None, limit: int = Query(500, le=5000)):
         statuses = [s for s in (status or "").split(",") if s] or None
-        return [_lot_out(l) for l in ctx.storage.list_lots(status=statuses, profile_id=profile_id, limit=limit)]
+        return [_lot_out(lot_) for lot_ in ctx.storage.list_lots(status=statuses, profile_id=profile_id, limit=limit)]
 
     @app.get("/api/lots/{lot_id}")
     def get_lot(lot_id: int):
@@ -410,7 +434,7 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         try:
             return _lot_out(publisher.update(lot, body or {}, sync_source_price=True))
         except ValueError as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
 
     @app.post("/api/lots/{lot_id}/publish")
     def publish_lot(lot_id: int):
@@ -419,7 +443,7 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         try:
             lot = publisher.publish(lot)
         except RuntimeError as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
         out = _lot_out(lot)
         if lot.status == LotStatus.ERROR:
             raise HTTPException(502, f"FunPay: {lot.error}")
@@ -453,44 +477,44 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         _require_funpay()
         try:
             return ctx.funpay.categories()
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(502, f"FunPay: {e}")
+        except Exception as e:
+            raise HTTPException(502, f"FunPay: {e}") from e
 
     @app.get("/api/funpay/filters")
     def funpay_filters(subcategory_id: int):
         _require_funpay()
         try:
             return ctx.funpay.list_filters(subcategory_id)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(502, f"FunPay: {e}")
+        except Exception as e:
+            raise HTTPException(502, f"FunPay: {e}") from e
 
     @app.get("/api/funpay/lot-form")
     def funpay_lot_form(subcategory_id: int):
         _require_funpay()
         try:
             form = ctx.funpay.get_lot_form(subcategory_id)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(502, f"FunPay: {e}")
+        except Exception as e:
+            raise HTTPException(502, f"FunPay: {e}") from e
         return form.get("schema", form) if isinstance(form, dict) else form
 
     @app.get("/api/lolz/categories")
     def lolz_categories():
         try:
             return ctx.lolz.categories()
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(502, f"Lolzteam: {e}")
+        except Exception as e:
+            raise HTTPException(502, f"Lolzteam: {e}") from e
 
     @app.get("/api/lolz/params")
     def lolz_params(category: str):
         _require_lolz()
         try:
             return ctx.lolz.category_params(category)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(502, f"Lolzteam: {e}")
+        except Exception as e:
+            raise HTTPException(502, f"Lolzteam: {e}") from e
 
     # ------------------------------------------------------------- orders
     @app.get("/api/orders")
-    def list_orders(status: Optional[str] = None, limit: int = Query(200, le=5000)):
+    def list_orders(status: str | None = None, limit: int = Query(200, le=5000)):
         statuses = [x for x in (status or "").split(",") if x] or None
         if orders:
             return orders.list(status=statuses, limit=limit)
@@ -532,10 +556,12 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
     def _csv_response(rows: list[dict], columns: list[str], filename: str):
         import csv
         import io
+
         buf = io.StringIO()
         buf.write("\ufeff")  # BOM, чтобы Excel открыл UTF-8 корректно
         w = csv.DictWriter(buf, fieldnames=columns, delimiter=";", extrasaction="ignore")
         w.writeheader()
+
         def _safe(v):
             # защита от формул в Excel: текст из чужих объявлений не должен начинаться с = + - @
             if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r"):
@@ -545,61 +571,147 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         for r in rows:
             w.writerow({c: _safe(r.get(c)) for c in columns})
         from fastapi.responses import Response
-        return Response(content=buf.getvalue(), media_type="text/csv; charset=utf-8",
-                        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+        return Response(
+            content=buf.getvalue(),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
     @app.get("/api/export/found.csv")
-    def export_found(profile_id: Optional[str] = None, status: Optional[str] = None):
+    def export_found(profile_id: str | None = None, status: str | None = None):
         statuses = [x for x in (status or "").split(",") if x] or None
         rows = []
         for f in ctx.storage.list_found(profile_id=profile_id, status=statuses, limit=100000):
-            l = f.listing
-            rows.append({"id": f.id, "profile": _profile_names().get(f.profile_id, f.profile_id), "status": f.status.value,
-                         "source": l.source, "title": l.title, "price": l.price, "suggested_price": f.suggested_price,
-                         "region": l.region, "score": f.match.score, "highlights": ", ".join(f.match.highlights),
-                         "seller": l.seller_name, "seller_url": l.seller_url, "url": l.url,
-                         "available": f.available, "first_seen": f.first_seen.isoformat() if f.first_seen else ""})
-        return _csv_response(rows, ["id", "profile", "status", "source", "title", "price", "suggested_price", "region",
-                                    "score", "highlights", "seller", "seller_url", "url", "available", "first_seen"],
-                             "found.csv")
+            lot_ = f.listing
+            rows.append(
+                {
+                    "id": f.id,
+                    "profile": _profile_names().get(f.profile_id, f.profile_id),
+                    "status": f.status.value,
+                    "source": lot_.source,
+                    "title": lot_.title,
+                    "price": lot_.price,
+                    "suggested_price": f.suggested_price,
+                    "region": lot_.region,
+                    "score": f.match.score,
+                    "highlights": ", ".join(f.match.highlights),
+                    "seller": lot_.seller_name,
+                    "seller_url": lot_.seller_url,
+                    "url": lot_.url,
+                    "available": f.available,
+                    "first_seen": f.first_seen.isoformat() if f.first_seen else "",
+                }
+            )
+        return _csv_response(
+            rows,
+            [
+                "id",
+                "profile",
+                "status",
+                "source",
+                "title",
+                "price",
+                "suggested_price",
+                "region",
+                "score",
+                "highlights",
+                "seller",
+                "seller_url",
+                "url",
+                "available",
+                "first_seen",
+            ],
+            "found.csv",
+        )
 
     @app.get("/api/export/lots.csv")
-    def export_lots(status: Optional[str] = None):
+    def export_lots(status: str | None = None):
         statuses = [x for x in (status or "").split(",") if x] or None
         rows = []
-        for l in ctx.storage.list_lots(status=statuses, limit=100000):
-            rows.append({"id": l.id, "status": l.status.value, "title": l.title_ru, "price": l.price,
-                         "source_price": l.source_price, "margin": round(l.price - l.source_price, 2),
-                         "funpay_url": l.funpay_url, "source_url": l.source_url, "seller_url": l.seller_url,
-                         "source_available": l.source_available,
-                         "created_at": l.created_at.isoformat() if l.created_at else ""})
-        return _csv_response(rows, ["id", "status", "title", "price", "source_price", "margin", "funpay_url",
-                                    "source_url", "seller_url", "source_available", "created_at"], "lots.csv")
+        for lot_ in ctx.storage.list_lots(status=statuses, limit=100000):
+            rows.append(
+                {
+                    "id": lot_.id,
+                    "status": lot_.status.value,
+                    "title": lot_.title_ru,
+                    "price": lot_.price,
+                    "source_price": lot_.source_price,
+                    "margin": round(lot_.price - lot_.source_price, 2),
+                    "funpay_url": lot_.funpay_url,
+                    "source_url": lot_.source_url,
+                    "seller_url": lot_.seller_url,
+                    "source_available": lot_.source_available,
+                    "created_at": lot_.created_at.isoformat() if lot_.created_at else "",
+                }
+            )
+        return _csv_response(
+            rows,
+            [
+                "id",
+                "status",
+                "title",
+                "price",
+                "source_price",
+                "margin",
+                "funpay_url",
+                "source_url",
+                "seller_url",
+                "source_available",
+                "created_at",
+            ],
+            "lots.csv",
+        )
 
     @app.get("/api/export/orders.csv")
     def export_orders():
         rows = [{**o.model_dump(mode="json")} for o in ctx.storage.list_orders(limit=100000)]
-        return _csv_response(rows, ["id", "funpay_order_id", "status", "title", "price", "buyer_name", "buyer_url",
-                                    "order_url", "source_url", "source_price", "order_date", "note"], "orders.csv")
+        return _csv_response(
+            rows,
+            [
+                "id",
+                "funpay_order_id",
+                "status",
+                "title",
+                "price",
+                "buyer_name",
+                "buyer_url",
+                "order_url",
+                "source_url",
+                "source_price",
+                "order_date",
+                "note",
+            ],
+            "orders.csv",
+        )
 
     # ------------------------------------------------------------- market
     @app.get("/api/found/{found_id}/market")
     def found_market(found_id: int):
         """Статистика цен по похожим находкам (тот же профиль): помогает оценить, не завышена ли цена."""
         import statistics
+
         f = _get_found(found_id)
-        same = [x for x in ctx.storage.list_found(profile_id=f.profile_id, limit=100000)
-                if x.match.matched and x.listing.price > 0]
+        same = [
+            x
+            for x in ctx.storage.list_found(profile_id=f.profile_id, limit=100000)
+            if x.match.matched and x.listing.price > 0
+        ]
         by_source: dict[str, list[float]] = {}
         for x in same:
             by_source.setdefault(x.listing.source, []).append(x.listing.price)
 
-        def _stats(prices: list[float]) -> Optional[dict]:
+        def _stats(prices: list[float]) -> dict | None:
             if not prices:
                 return None
             ps = sorted(prices)
-            return {"count": len(ps), "min": ps[0], "median": statistics.median(ps),
-                    "avg": round(sum(ps) / len(ps), 2), "max": ps[-1]}
+            return {
+                "count": len(ps),
+                "min": ps[0],
+                "median": statistics.median(ps),
+                "avg": round(sum(ps) / len(ps), 2),
+                "max": ps[-1],
+            }
 
         all_prices = [x.listing.price for x in same]
         below = sum(1 for p_ in all_prices if p_ < f.listing.price)
@@ -614,24 +726,25 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
 
     # ------------------------------------------------------- seller / history
     @app.get("/api/funpay/seller")
-    def funpay_seller(seller_id: Optional[str] = None, url: Optional[str] = None):
+    def funpay_seller(seller_id: str | None = None, url: str | None = None):
         """Карточка продавца FunPay: имя, отзывы, его лоты (для оценки надёжности исходника)."""
         _require_funpay()
         sid = seller_id
         if not sid and url:
             import re
+
             m = re.search(r"/users/(\d+)", url)
             sid = m.group(1) if m else None
         if not sid:
             raise HTTPException(400, "укажите seller_id или url продавца FunPay")
         try:
             info = ctx.funpay.get_seller(sid)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(502, f"FunPay: {e}")
+        except Exception as e:
+            raise HTTPException(502, f"FunPay: {e}") from e
         if not info:
             raise HTTPException(404, "продавец не найден")
         lots = info.get("lots") or []
-        info["lots"] = [l.model_dump(mode="json") if hasattr(l, "model_dump") else l for l in lots][:200]
+        info["lots"] = [lot_.model_dump(mode="json") if hasattr(lot_, "model_dump") else lot_ for lot_ in lots][:200]
         info["lots_count"] = len(lots)
         return info
 
@@ -643,8 +756,12 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         hist = ctx.storage.price_history(f.id)
         first = hist[0]["price"] if hist else f.listing.price
         last = hist[-1]["price"] if hist else f.listing.price
-        return {"history": hist, "first": first, "last": last,
-                "change_percent": round((last - first) / first * 100, 1) if first else 0.0}
+        return {
+            "history": hist,
+            "first": first,
+            "last": last,
+            "change_percent": round((last - first) / first * 100, 1) if first else 0.0,
+        }
 
     # ------------------------------------------------------ reprice / autoreply
     @app.post("/api/reprice")
@@ -670,21 +787,22 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
     def _chat():
         _require_funpay()
         from .sources.funpay_chat import FunPayChat
+
         return FunPayChat(ctx.funpay)
 
     @app.get("/api/chat")
     def chat_list():
         try:
             return _chat().list_chats()
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(502, f"FunPay: {e}")
+        except Exception as e:
+            raise HTTPException(502, f"FunPay: {e}") from e
 
     @app.get("/api/chat/{chat_id}/history")
     def chat_history(chat_id: int):
         try:
             return _chat().get_history(chat_id)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(502, f"FunPay: {e}")
+        except Exception as e:
+            raise HTTPException(502, f"FunPay: {e}") from e
 
     @app.post("/api/chat/{chat_id}/send")
     def chat_send(chat_id: int, body: dict):
@@ -693,10 +811,29 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
             raise HTTPException(400, "пустое сообщение")
         try:
             _chat().send_message(chat_id, text)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(502, f"FunPay: {e}")
+        except Exception as e:
+            raise HTTPException(502, f"FunPay: {e}") from e
         ctx.log("chat", f"отправлено сообщение в чат {chat_id}: {text[:60]}")
         return {"ok": True}
+
+    # --------------------------------------------------- diagnostics (begin)
+    @app.get("/api/diagnostics/run")
+    def diagnostics_run(funpay: bool = True, lolz: bool = True, subcategory_id: int | None = None):
+        """Прогнать проверки парсеров FunPay/Lolz; отчёт и обезличенные снимки — в data/diagnostics/."""
+        from .diagnostics import run_diagnostics
+
+        return run_diagnostics(ctx, funpay=funpay, lolz=lolz, sample_subcategory_id=subcategory_id)
+
+    @app.get("/api/diagnostics/report")
+    def diagnostics_report():
+        from .diagnostics import load_report
+
+        report = load_report()
+        if report is None:
+            raise HTTPException(404, "диагностика ещё не запускалась")
+        return report
+
+    # ----------------------------------------------------- diagnostics (end)
 
     # ----------------------------------------------------------- utilities
     @app.get("/api/events")
@@ -707,12 +844,13 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
     def pricing_preview(body: PricingPreview):
         try:
             return {"price": calculate_price(body.price, body.pricing)}
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(400, f"ошибка формулы: {e}")
+        except Exception as e:
+            raise HTTPException(400, f"ошибка формулы: {e}") from e
 
     @app.post("/api/matching/test")
     def matching_test(body: MatchingTest):
         from .matching import evaluate
+
         criteria = body.criteria
         if criteria is None and body.profile is not None:
             criteria = body.profile.criteria
@@ -720,19 +858,24 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
             try:
                 criteria = ctx.profiles.get(body.profile_id).criteria
             except KeyError:
-                raise HTTPException(404, "профиль не найден")
+                raise HTTPException(404, "профиль не найден") from None
         if criteria is None:
             raise HTTPException(400, "нужен profile, profile_id или criteria")
-        listing = Listing(source="funpay", source_id="test", url="", title=body.text, price=body.price,
-                          region=body.region, attributes=body.attributes)
+        listing = Listing(
+            source="funpay",
+            source_id="test",
+            url="",
+            title=body.text,
+            price=body.price,
+            region=body.region,
+            attributes=body.attributes,
+        )
         result: MatchResult = evaluate(listing, criteria)
         out = result.model_dump(mode="json")
         pricing = body.profile.pricing if body.profile else None
         if pricing and result.matched:
-            try:
+            with contextlib.suppress(Exception):
                 out["suggested_price"] = calculate_price(body.price, pricing)
-            except Exception:  # noqa: BLE001
-                pass
         return out
 
     # ------------------------------------------------------------- static
