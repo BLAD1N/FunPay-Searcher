@@ -119,6 +119,12 @@ function setPath(obj, path, value) {
 }
 function toNum(v) { if (v === '' || v == null) return null; const n = Number(String(v).replace(',', '.')); return isNaN(n) ? null : n; }
 
+/** Скачивание файла по URL (CSV-экспорт): через временную ссылку с атрибутом download. */
+function downloadUrl(url) {
+  const a = h('a', { href: url, download: '' });
+  document.body.append(a); a.click(); a.remove();
+}
+
 /** Запуск асинхронного действия с блокировкой кнопки и показом ошибки. */
 async function busy(btn, fn) {
   if (btn && btn.disabled) return;
@@ -358,11 +364,16 @@ async function openLotPreview(found, afterSave) {
   catch (e) { toast(e.message, 'error'); return; }
   const form = lotForm(preview);
   const l = found.listing;
+  // блок «Рынок» подгружается после открытия окна
+  const marketBox = h('div', { class: 'mb-16' }, h('span', { class: 'muted small' }, 'Загрузка рыночной статистики…'));
+  API.get(`/api/found/${found.id}/market`).then(mk => replace(marketBox, marketBlock(mk)))
+    .catch(e => replace(marketBox, h('span', { class: 'muted small' }, 'Рынок: ' + e.message)));
   const m = openModal({
     title: 'Предпросмотр лота', size: 'lg',
     body: [
       h('div', { class: 'callout info mb-16' }, h('div', {}, h('b', {}, 'Исходник: '), extLink(l.url, l.title || l.url), ' — ', fmtMoney(l.price, l.currency),
         l.seller_name ? [' · продавец ', extLink(l.seller_url, l.seller_name) || l.seller_name] : null)),
+      marketBox,
       form.el,
     ],
     footer: [
@@ -379,6 +390,37 @@ async function openLotPreview(found, afterSave) {
       }) }, 'Создать на FunPay'),
     ],
   });
+}
+
+/** Блок рыночной статистики по похожим находкам (GET /api/found/{id}/market). */
+function marketBlock(mk) {
+  const a = mk && mk.all;
+  if (!a || !a.count) return h('div', { class: 'result-box' }, h('div', { class: 'label mb-8' }, 'Рынок'), h('span', { class: 'muted small' }, 'Похожих находок по этому профилю пока нет'));
+  const bySource = Object.entries(mk.by_source || {}).filter(([, s]) => s && s.count)
+    .map(([k, s]) => `${SOURCE_LABEL[k] || k}: ${s.count} (медиана ${fmtMoney(s.median)})`).join(' · ');
+  const cheaper = mk.cheaper_than_suggested || 0;
+  return h('div', { class: 'result-box' },
+    h('div', { class: 'label mb-8' }, 'Рынок — похожие находки по профилю'),
+    h('div', {}, `Похожих находок: ${a.count} · мин ${fmtMoney(a.min)} · медиана ${fmtMoney(a.median)} · макс ${fmtMoney(a.max)}` + (mk.percentile != null ? ` · дешевле этого: ${mk.percentile}%` : '')),
+    bySource ? h('div', { class: 'muted small mt-8' }, bySource) : null,
+    cheaper > 0 ? h('div', { class: 'callout warn mt-8' }, `⚠ ${cheaper} ${plural(cheaper, 'похожий аккаунт', 'похожих аккаунта', 'похожих аккаунтов')} дешевле вашей цены${mk.suggested_price != null ? ' ' + fmtMoney(mk.suggested_price) : ''} — проверьте наценку`) : null);
+}
+async function openMarketModal(found) {
+  const box = h('div', {}, loadingState());
+  openModal({ title: 'Рынок: ' + ((found.listing && found.listing.title) || '').slice(0, 70), body: box });
+  try {
+    const mk = await API.get(`/api/found/${found.id}/market`);
+    replace(box, h('div', { class: 'muted small mb-8' }, 'Цена исходника: ' + fmtMoney(found.listing.price, found.listing.currency) + (found.suggested_price != null ? ' · наша цена: ' + fmtMoney(found.suggested_price) : '')), marketBlock(mk));
+  } catch (e) { replace(box, h('span', { class: 'danger' }, e.message)); }
+}
+
+/** Сводка результата поднятия лотов для уведомления. */
+function raiseSummary(r) {
+  const parts = [];
+  if ((r.raised || []).length) parts.push('Поднято: ' + r.raised.join(', '));
+  if ((r.waiting || []).length) parts.push('Ожидание: ' + r.waiting.map(w => `${w.category} (${Math.ceil((w.wait_seconds || 0) / 60)} мин)`).join(', '));
+  if ((r.errors || []).length) parts.push('Ошибки: ' + r.errors.join('; '));
+  return parts.join(' · ') || 'Нет активных лотов для поднятия';
 }
 
 /** Модалка редактирования нашего лота. */
@@ -435,6 +477,7 @@ const ROUTES = [
   { re: /^#\/dashboard\/?$/, nav: 'dashboard', page: pageDashboard },
   { re: /^#\/found\/?$/, nav: 'found', page: pageFound },
   { re: /^#\/lots\/?$/, nav: 'lots', page: pageLots },
+  { re: /^#\/orders\/?$/, nav: 'orders', page: pageOrders },
   { re: /^#\/profiles\/?$/, nav: 'profiles', page: pageProfiles },
   { re: /^#\/profiles\/([^/]+)\/?$/, nav: 'profiles', page: pageProfileEditor },
   { re: /^#\/settings\/?$/, nav: 'settings', page: pageSettings },
@@ -481,8 +524,13 @@ function updateSidebar(st) {
   const f = (st.counts && st.counts.found) || {}, l = (st.counts && st.counts.lots) || {};
   setBadge('#badge-candidates', (f.candidate || 0) + (f.new || 0));
   setBadge('#badge-lots', l.active || 0);
+  setBadge('#badge-orders', (st.orders && st.orders.paid) || 0);
   setConn('#conn-funpay', 'FunPay', st.auth && st.auth.funpay);
   setConn('#conn-lolz', 'Lolz', st.auth && st.auth.lolz);
+  const tgOn = !!(st.telegram && st.telegram.enabled), tg = $('#conn-telegram');
+  tg.classList.toggle('ok', tgOn); tg.classList.remove('err');
+  tg.title = tgOn ? 'Telegram: уведомления включены' : 'Telegram: уведомления выключены (см. Настройки)';
+  $('#conn-telegram-user').textContent = tgOn ? 'вкл' : 'выкл';
 }
 function setBadge(sel, n) { const el = $(sel); el.textContent = n; el.hidden = !n; }
 function setConn(sel, name, a) {
@@ -507,7 +555,7 @@ async function pageDashboard(root) {
   let extra = { found: [], lots: [], events: [] };
   let wasRunning = !!(status.search && status.search.running);
 
-  const progressBox = h('div'), tilesBox = h('div', { class: 'grid grid-4' }), lastBox = h('div'), monitorBox = h('div'), eventsBox = h('div');
+  const progressBox = h('div'), tilesBox = h('div', { class: 'grid grid-5' }), lastBox = h('div'), monitorBox = h('div'), eventsBox = h('div');
 
   // --- выпадающие списки выбора профилей и источников ---
   const dropdown = (label, options, set) => {
@@ -562,37 +610,48 @@ async function pageDashboard(root) {
     const f = (st.counts && st.counts.found) || {}, l = (st.counts && st.counts.lots) || {};
     const today = extra.found.filter(x => isToday(x.first_seen)).length;
     const broken = extra.lots.filter(x => x.source_available === false).length;
+    const paid = (st.orders && st.orders.paid) || 0;
     const tile = (label, value, sub, cls = '') => h('div', { class: 'stat-tile ' + cls }, h('div', { class: 'stat-label' }, label), h('div', { class: 'stat-value' }, nfRU.format(value || 0)), sub ? h('div', { class: 'stat-sub' }, sub) : null);
+    const link = (href, el) => h('a', { href, style: 'text-decoration:none;color:inherit' }, el);
     replace(tilesBox,
-      h('a', { href: '#/found', style: 'text-decoration:none;color:inherit' }, tile('Кандидатов', f.candidate || 0, `новых: ${f.new || 0} · отклонено: ${f.rejected || 0}`)),
+      link('#/found', tile('Кандидатов', f.candidate || 0, `новых: ${f.new || 0} · отклонено: ${f.rejected || 0}`)),
       tile('Новых за сегодня', today, 'по времени первого обнаружения'),
-      h('a', { href: '#/lots', style: 'text-decoration:none;color:inherit' }, tile('Активных лотов', l.active || 0, `черновиков: ${l.draft || 0} · снято: ${l.deactivated || 0}`)),
-      tile('Исходник недоступен', broken, broken ? 'лоты требуют внимания' : 'все исходники на месте', broken ? 'alert' : ''));
+      link('#/lots', tile('Активных лотов', l.active || 0, `черновиков: ${l.draft || 0} · снято: ${l.deactivated || 0}`)),
+      tile('Исходник недоступен', broken, broken ? 'лоты требуют внимания' : 'все исходники на месте', broken ? 'alert' : ''),
+      link('#/orders', tile('Заказов к выполнению', paid, paid ? 'оплачены и ждут выдачи' : 'новых заказов нет', paid ? 'warn' : '')));
   };
   const renderLast = (st) => {
     const last = (st.search && st.search.last) || [];
     if (!last.length) { replace(lastBox, emptyState('Поиск ещё не запускался', 'Нажмите «Найти аккаунты», чтобы начать')); return; }
     replace(lastBox, h('div', { class: 'table-wrap' }, h('table', { class: 'table compact' },
-      h('thead', {}, h('tr', {}, h('th', {}, 'Профиль'), h('th', {}, 'Источник'), h('th', { class: 'num' }, 'Получено'), h('th', { class: 'num' }, 'Подошло'), h('th', { class: 'num' }, 'Новых'), h('th', { class: 'num' }, 'Ошибки'))),
+      h('thead', {}, h('tr', {}, h('th', { style: 'min-width:120px' }, 'Профиль'), h('th', {}, 'Источник'), h('th', { class: 'num' }, 'Получено'), h('th', { class: 'num' }, 'Подошло'), h('th', { class: 'num' }, 'Новых'), h('th', { class: 'num' }, 'Ошибки'))),
       h('tbody', {}, last.map(r => h('tr', {},
-        h('td', {}, h('div', {}, profileName(r.profile_id)), h('div', { class: 'muted small', title: fmtDate(r.started_at) }, fmtRel(r.started_at) + (r.finished_at ? ' · ' + fmtDuration(r.started_at, r.finished_at) : ''))),
+        h('td', {}, h('div', {}, profileName(r.profile_id)),
+          h('div', { class: 'muted small', title: 'Начало: ' + fmtDate(r.started_at) + (r.finished_at ? '\nДлительность: ' + fmtDuration(r.started_at, r.finished_at) : '') }, fmtRel(r.started_at))),
         h('td', {}, sourceChip(r.source)),
         h('td', { class: 'num' }, r.fetched), h('td', { class: 'num success' }, r.matched), h('td', { class: 'num accent' }, r.new),
         h('td', { class: 'num' }, (r.errors || []).length ? h('span', { class: 'chip danger', title: r.errors.join('\n') }, r.errors.length) : h('span', { class: 'muted' }, '—'))))))));
   };
   const renderMonitor = (st) => {
-    const mo = st.monitor || {};
+    const mo = st.monitor || {}, rs = st.raise || null;
     replace(monitorBox,
       h('div', { class: 'grid grid-2 mb-16' },
         h('div', {}, h('div', { class: 'stat-label' }, 'Последняя проверка'), h('div', { class: 'bold', title: fmtDate(mo.last_run) }, mo.last_run ? fmtRel(mo.last_run) : 'ещё не было')),
         h('div', {}, h('div', { class: 'stat-label' }, 'Следующая проверка'), h('div', { class: 'bold', title: fmtDate(mo.next_run) }, mo.next_run ? fmtRel(mo.next_run) : (mo.interval_minutes ? 'не запланирована' : 'мониторинг выключен')))),
       h('div', { class: 'row between' },
         h('div', { class: 'muted small' }, mo.running ? h('span', { class: 'row' }, h('span', { class: 'spinner' }), 'идёт проверка…') : (mo.interval_minutes ? `интервал: ${mo.interval_minutes} мин` : 'интервал не задан')),
-        h('button', { class: 'btn', disabled: !!mo.running, onclick: (e) => busy(e.currentTarget, async () => {
-          const r = await API.post('/api/monitor/run');
-          toast(`Проверено исходников: ${r.checked ?? 0}, недоступно: ${r.unavailable ?? 0}`, (r.unavailable || 0) > 0 ? 'warning' : 'success');
-          await loadExtra(); await tick();
-        }) }, 'Проверить сейчас')));
+        h('div', { class: 'btn-group' },
+          h('button', { class: 'btn', title: 'Поднять наши активные лоты вверх списка на FunPay', onclick: (e) => busy(e.currentTarget, async () => {
+            const r = await API.post('/api/raise');
+            toast(raiseSummary(r), (r.errors || []).length ? 'warning' : 'success', 7000);
+            await tick();
+          }) }, '⬆ Поднять лоты'),
+          h('button', { class: 'btn', disabled: !!mo.running, onclick: (e) => busy(e.currentTarget, async () => {
+            const r = await API.post('/api/monitor/run');
+            toast(`Проверено исходников: ${r.checked ?? 0}, недоступно: ${r.unavailable ?? 0}`, (r.unavailable || 0) > 0 ? 'warning' : 'success');
+            await loadExtra(); await tick();
+          }) }, 'Проверить сейчас'))),
+      rs && rs.last_run ? h('div', { class: 'muted small mt-8' }, 'Последнее поднятие лотов: ', h('span', { title: fmtDate(rs.last_run) }, fmtRel(rs.last_run))) : null);
   };
   const renderEvents = () => {
     if (!extra.events.length) { replace(eventsBox, emptyState('Событий пока нет')); return; }
@@ -678,7 +737,9 @@ async function pageFound(root) {
   const statusOpts = Object.entries(FOUND_STATUS).map(([value, s]) => ({ value, label: s.label }));
   append(root,
     h('div', { class: 'page-header' }, h('div', {}, h('h1', {}, 'Найдено'), h('div', { class: 'sub' }, 'Объявления, подошедшие под критерии профилей')),
-      h('div', { class: 'page-actions' }, countEl, h('button', { class: 'btn', onclick: load }, '⟳ Обновить'))),
+      h('div', { class: 'page-actions' }, countEl,
+        h('button', { class: 'btn', title: 'Скачать текущую выборку в CSV', onclick: () => downloadUrl('/api/export/found.csv' + qs({ status: [...filters.statuses].join(',') || null, profile_id: filters.profile_id })) }, '⤓ Экспорт CSV'),
+        h('button', { class: 'btn', onclick: load }, '⟳ Обновить'))),
     h('div', { class: 'filters' },
       h('select', { class: 'select', value: '', onchange: (e) => { filters.profile_id = e.target.value; load(); } }, h('option', { value: '' }, 'Все профили'), state.profiles.map(p => h('option', { value: p.id }, p.name))),
       h('select', { class: 'select', value: '', onchange: (e) => { filters.source = e.target.value; load(); } }, h('option', { value: '' }, 'Все источники'), h('option', { value: 'funpay' }, 'FunPay'), h('option', { value: 'lolz' }, 'Lolz')),
@@ -704,6 +765,7 @@ function foundCard(f, ctx) {
       toast(r.available === true ? 'Исходник доступен' : r.available === false ? 'Исходник недоступен' : 'Не удалось определить доступность', r.available === false ? 'warning' : 'info');
       ctx.update();
     }),
+    act('Рынок', '', () => openMarketModal(f)),
     f.status === 'ignored'
       ? act('Вернуть', '', async () => { await API.post(`/api/found/${f.id}/status`, { status: 'candidate' }); toast('Возвращено в кандидаты'); ctx.reload(); })
       : act('Скрыть', '', async () => { await API.post(`/api/found/${f.id}/status`, { status: 'ignored' }); toast('Объявление скрыто'); ctx.reload(); }),
@@ -757,7 +819,9 @@ async function pageLots(root) {
   const statusOpts = Object.entries(LOT_STATUS).map(([value, s]) => ({ value, label: s.label }));
   append(root,
     h('div', { class: 'page-header' }, h('div', {}, h('h1', {}, 'Лоты'), h('div', { class: 'sub' }, 'Наши лоты на FunPay, созданные по найденным объявлениям')),
-      h('div', { class: 'page-actions' }, countEl, h('button', { class: 'btn', onclick: load }, '⟳ Обновить'))),
+      h('div', { class: 'page-actions' }, countEl,
+        h('button', { class: 'btn', title: 'Скачать текущую выборку в CSV', onclick: () => downloadUrl('/api/export/lots.csv' + qs({ status: [...filters.statuses].join(',') || null })) }, '⤓ Экспорт CSV'),
+        h('button', { class: 'btn', onclick: load }, '⟳ Обновить'))),
     h('div', { class: 'filters' }, h('span', { class: 'label' }, 'Статус:'), chipToggles(statusOpts, filters.statuses, load)),
     tableBox);
   await load();
@@ -1085,14 +1149,85 @@ async function pageProfileEditor(root, id) {
 }
 
 // ----------------------------------------------------------------------------
+// 6.5a Продажи (заказы наших лотов на FunPay)
+// ----------------------------------------------------------------------------
+
+const ORDER_STATUS = {
+  paid: { label: 'Оплачен — выполнить!', cls: 'warning' }, closed: { label: 'Закрыт', cls: 'success' }, refunded: { label: 'Возврат', cls: 'neutral' },
+};
+
+async function pageOrders(root) {
+  const filters = { statuses: new Set(['paid', 'closed']) };
+  const listBox = h('div', { class: 'found-list' });
+  const countEl = h('span', { class: 'muted small' });
+  const load = async () => {
+    replace(listBox, loadingState());
+    let orders;
+    try { orders = await API.get('/api/orders' + qs({ status: [...filters.statuses].join(',') || null, limit: 200 })); }
+    catch (e) { replace(listBox, emptyState('Ошибка загрузки', e.message, '⚠')); return; }
+    countEl.textContent = orders.length + ' ' + plural(orders.length, 'заказ', 'заказа', 'заказов');
+    replace(listBox, orders.length ? orders.map(orderCard) : emptyState('Заказов нет', 'Нажмите «Синхронизировать», чтобы загрузить продажи с FunPay', '🧾'));
+  };
+  const statusOpts = Object.entries(ORDER_STATUS).map(([value, s]) => ({ value, label: s.label }));
+  append(root,
+    h('div', { class: 'page-header' }, h('div', {}, h('h1', {}, 'Продажи'), h('div', { class: 'sub' }, 'Заказы наших лотов на FunPay: что купить и кому выдать')),
+      h('div', { class: 'page-actions' }, countEl,
+        h('button', { class: 'btn btn-primary', onclick: (e) => busy(e.currentTarget, async () => {
+          const r = await API.post('/api/orders/sync');
+          const errs = r.errors || [];
+          toast(`Синхронизация: новых ${r.new ?? 0}, обновлено ${r.updated ?? 0}, сопоставлено ${r.matched ?? 0}` + (errs.length ? ` · ошибки: ${errs.join('; ')}` : ''), errs.length ? 'warning' : 'success', 7000);
+          await load(); loadStatus().catch(() => {});
+        }) }, '⟳ Синхронизировать'),
+        h('button', { class: 'btn', onclick: () => downloadUrl('/api/export/orders.csv') }, '⤓ Экспорт CSV'),
+        h('button', { class: 'btn', onclick: load }, 'Обновить'))),
+    h('div', { class: 'filters' }, h('span', { class: 'label' }, 'Статус:'), chipToggles(statusOpts, filters.statuses, load)),
+    listBox);
+  await load();
+}
+
+/** Карточка заказа: статус, покупатель, ссылка на заказ, где купить исходник, маржа, заметка. */
+function orderCard(o) {
+  const lot = o.lot || null;
+  const srcPrice = o.source_price ?? (lot ? lot.source_price : null);
+  const srcUrl = o.source_url || (lot ? lot.source_url : null);
+  const margin = srcPrice != null ? (o.price || 0) - srcPrice : null;
+  const when = o.order_date || o.first_seen;
+  const note = h('textarea', { class: 'textarea', rows: 2, placeholder: 'Заметка: логин/пароль выданы, статус…', value: o.note || '', 'aria-label': 'Заметка к заказу',
+    onchange: async (e) => {
+      try { await API.post(`/api/orders/${o.id}/note`, { note: e.target.value }); toast('Заметка сохранена', 'success', 2000); }
+      catch (err) { toast(err.message, 'error'); }
+    } });
+  return h('div', { class: 'order-card' + (o.status === 'paid' ? ' paid' : '') },
+    h('div', { class: 'found-main' },
+      h('div', { class: 'row' }, statusChip(o.status, ORDER_STATUS), o.subcategory_name ? h('span', { class: 'chip soft' }, o.subcategory_name) : null,
+        h('span', { class: 'muted small', title: fmtDate(when) }, fmtRel(when)), h('span', { class: 'muted small mono' }, '#' + o.funpay_order_id)),
+      h('div', { class: 'found-title' }, o.title || '(без названия)'),
+      h('div', { class: 'found-meta' },
+        o.buyer_name ? (o.buyer_url ? h('a', { href: o.buyer_url, target: '_blank', rel: 'noopener' }, '👤 ' + o.buyer_name) : h('span', {}, '👤 ' + o.buyer_name)) : null,
+        extLink(o.order_url, 'Открыть заказ ↗')),
+      lot ? h('div', { class: 'small muted' }, 'Наш лот #' + lot.id + ': ', h('a', { href: '#/lots' }, lot.title_ru || ('лот #' + lot.id)), ' · ', fmtMoney(lot.price)) : null),
+    h('div', { class: 'order-source' },
+      h('div', { class: 'label' }, 'Исходник для выдачи'),
+      srcUrl ? [
+        h('a', { class: 'btn btn-primary btn-sm', href: srcUrl, target: '_blank', rel: 'noopener' }, '🛒 Купить исходник ↗'),
+        h('div', { class: 'small' }, 'Цена исходника: ', h('b', {}, fmtMoney(srcPrice))),
+        margin != null ? h('div', { class: 'small ' + (margin >= 0 ? 'success' : 'danger') }, 'Маржа: ', h('b', {}, fmtMoney(margin)), srcPrice ? ` (${fmtPct(margin / srcPrice * 100)})` : '') : null,
+      ] : h('div', { class: 'muted small' }, lot ? 'ссылка на исходник отсутствует' : 'лот не сопоставлен — найдите исходник вручную')),
+    h('div', { class: 'order-side' },
+      h('div', { class: 'price-ours' }, fmtMoney(o.price, o.currency)),
+      note));
+}
+
+// ----------------------------------------------------------------------------
 // 6.6 Настройки
 // ----------------------------------------------------------------------------
 
 async function pageSettings(root) {
   const s = await API.get('/api/settings');
   const model = clone(s);
-  const secrets = { golden_key: '', token: '' };
-  const authBox = h('div');
+  model.telegram = model.telegram || { enabled: false, chat_id: '', notify_new_candidates: true, notify_source_sold: true, notify_new_orders: true, notify_errors: true };
+  const secrets = { golden_key: '', token: '', bot_token: '' };
+  const authBox = h('div'), tgBox = h('div');
   const form = h('div', { class: 'stack' },
     h('div', { class: 'card' }, h('div', { class: 'card-header' }, h('h2', {}, h('span', { class: 'row' }, sourceChip('funpay'), 'FunPay')), s.funpay.golden_key_set ? h('span', { class: 'chip success' }, 'golden_key установлен') : h('span', { class: 'chip warning' }, 'golden_key не задан')),
       h('div', { class: 'form-grid' },
@@ -1116,7 +1251,31 @@ async function pageSettings(root) {
       h('div', { class: 'form-grid' },
         h('div', { class: 'span-2 row', style: 'gap:24px' }, checkInput(model, 'monitor.enabled', 'Проверять доступность исходников'), checkInput(model, 'monitor.auto_deactivate', 'Снимать лот, если исходник продан')),
         field('Интервал проверки, мин', numberInput(model, 'monitor.interval_minutes', { step: 1, min: 1 })),
-        field('Автопоиск каждые N минут', numberInput(model, 'monitor.auto_search_minutes', { step: 1, min: 0 }), '0 — автопоиск выключен'))),
+        field('Автопоиск каждые N минут', numberInput(model, 'monitor.auto_search_minutes', { step: 1, min: 0 }), '0 — автопоиск выключен'),
+        field('Проверять заказы каждые N минут', numberInput(model, 'monitor.orders_check_minutes', { step: 1, min: 0 }), 'Новые продажи на FunPay; 0 — не проверять'),
+        field('Автоподнятие лотов каждые N часов', numberInput(model, 'monitor.auto_raise_hours', { step: 0.5, min: 0 }), 'Поднимать наши лоты вверх списка; 0 — выключено'))),
+    h('div', { class: 'card' }, h('div', { class: 'card-header' }, h('h2', {}, '✈ Telegram-уведомления'), model.telegram.bot_token_set ? h('span', { class: 'chip success' }, 'токен бота установлен') : h('span', { class: 'chip warning' }, 'токен бота не задан')),
+      h('div', { class: 'form-grid' },
+        h('div', { class: 'span-2' }, checkInput(model, 'telegram.enabled', 'Отправлять уведомления в Telegram')),
+        field('Токен бота', h('input', { class: 'input mono', type: 'password', autocomplete: 'off', placeholder: model.telegram.bot_token_set ? 'оставьте пустым, чтобы не менять (' + model.telegram.bot_token + ')' : '123456789:AA…', oninput: (e) => { secrets.bot_token = e.target.value; } }),
+          'Создайте бота у @BotFather (команда /newbot) и скопируйте токен'),
+        field('chat_id', textInput(model, 'telegram.chat_id', { class: 'mono', placeholder: '123456789' }),
+          'Свой id подскажет @userinfobot. Для группы/канала укажите его id (вида -100…) и добавьте туда бота'),
+        h('div', { class: 'span-2 row', style: 'gap:20px' },
+          checkInput(model, 'telegram.notify_new_candidates', 'Новые кандидаты после поиска'),
+          checkInput(model, 'telegram.notify_source_sold', 'Исходник продан / лот снят'),
+          checkInput(model, 'telegram.notify_new_orders', 'Новые заказы'),
+          checkInput(model, 'telegram.notify_errors', 'Ошибки')),
+        h('div', { class: 'span-2 row between' }, h('span', { class: 'muted small' }, 'Проверка отправит тестовое сообщение в чат. Сначала сохраните настройки.'),
+          h('button', { class: 'btn', onclick: (e) => busy(e.currentTarget, async () => {
+            try {
+              const r = await API.post('/api/telegram/test');
+              replace(tgBox, h('div', { class: 'result-box ' + (r.ok ? 'ok' : 'bad') }, h('span', { class: 'dot ' + (r.ok ? 'ok' : 'bad') }), ' ',
+                r.ok ? h('span', { class: 'success' }, `Бот ${r.bot_name ? '@' + r.bot_name : ''} подключён, тестовое сообщение отправлено`) : h('span', { class: 'danger' }, r.error || 'ошибка')));
+            } catch (err) { replace(tgBox, h('div', { class: 'result-box bad' }, h('span', { class: 'danger' }, err.message))); }
+            loadStatus().catch(() => {});
+          }) }, 'Проверить Telegram')),
+        h('div', { class: 'span-2' }, tgBox))),
     h('div', { class: 'card' }, h('div', { class: 'card-header' }, h('h2', {}, 'Интерфейс')),
       h('div', { class: 'form-grid-3' },
         field('Название', textInput(model, 'ui.brand')),
@@ -1135,6 +1294,8 @@ async function pageSettings(root) {
     delete payload.funpay.golden_key_set; delete payload.lolz.token_set;
     if (secrets.golden_key.trim()) payload.funpay.golden_key = secrets.golden_key.trim(); else delete payload.funpay.golden_key;
     if (secrets.token.trim()) payload.lolz.token = secrets.token.trim(); else delete payload.lolz.token;
+    delete payload.telegram.bot_token_set;
+    if (secrets.bot_token.trim()) payload.telegram.bot_token = secrets.bot_token.trim(); else delete payload.telegram.bot_token;
     await API.put('/api/settings', payload);
     toast('Настройки сохранены', 'success');
     navigate();

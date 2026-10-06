@@ -142,6 +142,7 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
 .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.grid-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .stack { display: flex; flex-direction: column; gap: 16px; }
 .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .row.between { justify-content: space-between; }
@@ -155,6 +156,7 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
 .stat-value { font-size: 28px; font-weight: 600; line-height: 1.1; letter-spacing: -0.02em; }
 .stat-sub { color: var(--muted); font-size: 12px; margin-top: 6px; }
 .stat-tile.alert .stat-value { color: var(--danger); }
+.stat-tile.warn .stat-value { color: var(--warning); }
 
 /* Пустые состояния */
 .empty { text-align: center; color: var(--muted); padding: 40px 16px; }
@@ -336,6 +338,15 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
 
 .bulk-bar { position: sticky; top: 0; z-index: 5; display: flex; gap: 10px; align-items: center; padding: 10px 14px; margin-bottom: 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3); }
 
+/* Страница «Продажи»: карточки заказов */
+.order-card { display: grid; grid-template-columns: minmax(0, 1fr) 230px 240px; gap: 16px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.order-card.paid { border-color: rgba(242, 181, 68, 0.5); background: linear-gradient(90deg, rgba(242, 181, 68, 0.07), transparent 45%), var(--surface); }
+.order-source { display: flex; flex-direction: column; gap: 6px; padding-left: 16px; border-left: 1px solid var(--border); min-width: 0; }
+.order-source .btn { align-self: flex-start; }
+.order-side { display: flex; flex-direction: column; gap: 8px; }
+.order-side .price-ours { text-align: right; }
+.order-side .textarea { min-height: 56px; font-size: 12.5px; }
+
 /* Поиск на панели */
 .search-hero { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
 .search-hero .opts { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -424,6 +435,7 @@ details.dropdown .dropdown-panel { position: absolute; top: calc(100% + 6px); le
    -------------------------------------------------------------------------- */
 @media (max-width: 1280px) {
   .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .main { padding: 20px 24px 40px; }
 }
 @media (max-width: 1100px) {
@@ -435,6 +447,8 @@ details.dropdown .dropdown-panel { position: absolute; top: calc(100% + 6px); le
   .table td, .table th { padding: 8px 6px; }
   .table .ellipsis { max-width: 220px; }
   .table td.cell-title { max-width: 240px; }
+  .grid-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .order-card { grid-template-columns: minmax(0, 1fr) 200px 200px; }
   .found-card { grid-template-columns: 24px minmax(0, 1fr); }
   .found-side { grid-column: 2; align-items: flex-start; flex-direction: row; justify-content: space-between; flex-wrap: wrap; }
   .price-block { text-align: left; }
