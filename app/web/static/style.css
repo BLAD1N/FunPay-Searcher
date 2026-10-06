@@ -347,6 +347,38 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
 .order-side .price-ours { text-align: right; }
 .order-side .textarea { min-height: 56px; font-size: 12.5px; }
 
+/* Страница «Чаты»: статус-бар автоответчика, две панели, пузыри сообщений */
+.statusbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; margin-bottom: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; }
+.statusbar .spacer { flex: 1; }
+.chat-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: calc(100vh - 230px); min-height: 440px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.chat-list { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); }
+.chat-list .search { padding: 10px; border-bottom: 1px solid var(--border); }
+.chat-items { flex: 1; min-height: 0; overflow-y: auto; }
+.chat-item { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 8px; align-items: start; width: 100%; text-align: left; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+.chat-item:hover { background: var(--surface-2); }
+.chat-item.active { background: var(--accent-soft); }
+.chat-item .dot { margin-top: 6px; opacity: 0; }
+.chat-item.unread .dot { opacity: 1; background: var(--accent); }
+.chat-item .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-item.unread .name { color: var(--accent-hover); }
+.chat-item .preview { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-item .time { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.chat-pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.chat-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.chat-thread { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; background: var(--bg); }
+.chat-empty { flex: 1; display: flex; align-items: center; justify-content: center; }
+.msg { max-width: 72%; padding: 8px 12px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); white-space: pre-wrap; word-break: break-word; font-size: 13.5px; }
+.msg .meta { display: flex; gap: 8px; margin-top: 4px; font-size: 11px; color: var(--muted); }
+.msg.theirs { align-self: flex-start; border-bottom-left-radius: 4px; }
+.msg.mine { align-self: flex-end; background: var(--accent); border-color: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+.msg.mine .meta { color: rgba(255, 255, 255, 0.75); justify-content: flex-end; }
+.msg.mine a { color: #fff; }
+.msg.system { align-self: center; max-width: 90%; background: transparent; border: 0; color: var(--muted); font-size: 12px; text-align: center; }
+.msg.system .meta { justify-content: center; }
+.msg.pending { opacity: 0.6; }
+.chat-composer { display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid var(--border); }
+.chat-composer .textarea { min-height: 44px; max-height: 160px; }
+
 /* Поиск на панели */
 .search-hero { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
 .search-hero .opts { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -454,6 +486,8 @@ details.dropdown .dropdown-panel { position: absolute; top: calc(100% + 6px); le
   .table td.cell-title { max-width: 240px; }
   .grid-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .order-card { grid-template-columns: minmax(0, 1fr) 200px 200px; }
+  .chat-layout { grid-template-columns: 240px minmax(0, 1fr); }
+  .msg { max-width: 85%; }
   .found-card { grid-template-columns: 24px minmax(0, 1fr); }
   .found-side { grid-column: 2; align-items: flex-start; flex-direction: row; justify-content: space-between; flex-wrap: wrap; }
   .price-block { text-align: left; }

@@ -224,7 +224,8 @@ function showJsonModal(title, data) {
 // 4. Общие компоненты
 // ----------------------------------------------------------------------------
 
-const state = { status: null, profiles: [], funpayCategories: null, lolzCategories: null, pollTimer: null, pageToken: 0 };
+const state = { status: null, profiles: [], funpayCategories: null, lolzCategories: null, pollTimer: null, pageToken: 0,
+  chatUnread: null };   // число непрочитанных чатов; null — страница чатов ещё не открывалась (бейдж скрыт)
 
 const FOUND_STATUS = {
   new: { label: 'Новое', cls: 'accent' }, candidate: { label: 'Кандидат', cls: 'success' },
@@ -544,6 +545,7 @@ const ROUTES = [
   { re: /^#\/found\/?$/, nav: 'found', page: pageFound },
   { re: /^#\/lots\/?$/, nav: 'lots', page: pageLots },
   { re: /^#\/orders\/?$/, nav: 'orders', page: pageOrders },
+  { re: /^#\/chat\/?$/, nav: 'chat', page: pageChat },
   { re: /^#\/profiles\/?$/, nav: 'profiles', page: pageProfiles },
   { re: /^#\/profiles\/([^/]+)\/?$/, nav: 'profiles', page: pageProfileEditor },
   { re: /^#\/settings\/?$/, nav: 'settings', page: pageSettings },
@@ -591,6 +593,7 @@ function updateSidebar(st) {
   setBadge('#badge-candidates', (f.candidate || 0) + (f.new || 0));
   setBadge('#badge-lots', l.active || 0);
   setBadge('#badge-orders', (st.orders && st.orders.paid) || 0);
+  setBadge('#badge-chats', state.chatUnread || 0);   // скрыт, пока чаты не загружались
   setConn('#conn-funpay', 'FunPay', st.auth && st.auth.funpay);
   setConn('#conn-lolz', 'Lolz', st.auth && st.auth.lolz);
   const tgOn = !!(st.telegram && st.telegram.enabled), tg = $('#conn-telegram');
@@ -613,6 +616,13 @@ function setConn(sel, name, a) {
   user.textContent = a.ok ? (a.username || 'ок') : 'ошибка';
 }
 async function loadProfiles() { state.profiles = await API.get('/api/profiles'); return state.profiles; }
+/** Обновить бейдж непрочитанных чатов по списку чатов (GET /api/chat вызывают только страница чатов и редкий опрос панели). */
+function setChatUnread(chats) {
+  state.chatUnread = (chats || []).filter(c => c.unread).length;
+  setBadge('#badge-chats', state.chatUnread);
+}
+/** Время сообщения: ISO-дата -> «14:05», иначе строка FunPay как есть. */
+function chatTime(ts) { if (!ts) return ''; const d = parseDate(ts); return d ? fmtTime(d).slice(0, 5) : String(ts); }
 function profileName(id) { const p = state.profiles.find(x => x.id === id); return p ? p.name : id; }
 
 // ----------------------------------------------------------------------------
@@ -624,6 +634,7 @@ async function pageDashboard(root) {
   const sel = { profiles: new Set(), sources: new Set() };    // пусто = все
   let extra = { found: [], lots: [], events: [] };
   let wasRunning = !!(status.search && status.search.running);
+  let tickCount = 0;
 
   const progressBox = h('div'), tilesBox = h('div', { class: 'grid grid-5' }), lastBox = h('div'), monitorBox = h('div'), eventsBox = h('div');
 
@@ -703,7 +714,7 @@ async function pageDashboard(root) {
         h('td', { class: 'num' }, (r.errors || []).length ? h('span', { class: 'chip danger', title: r.errors.join('\n') }, r.errors.length) : h('span', { class: 'muted' }, '—'))))))));
   };
   const renderMonitor = (st) => {
-    const mo = st.monitor || {}, rs = st.raise || null, rp = st.reprice || null;
+    const mo = st.monitor || {}, rs = st.raise || null, rp = st.reprice || null, ar = st.autoreply || null, lr = ar && ar.last_result;
     replace(monitorBox,
       h('div', { class: 'grid grid-2 mb-16' },
         h('div', {}, h('div', { class: 'stat-label' }, 'Последняя проверка'), h('div', { class: 'bold', title: fmtDate(mo.last_run) }, mo.last_run ? fmtRel(mo.last_run) : 'ещё не было')),
@@ -730,7 +741,14 @@ async function pageDashboard(root) {
       rs && rs.last_run ? h('div', { class: 'muted small mt-8' }, 'Последнее поднятие лотов: ', h('span', { title: fmtDate(rs.last_run) }, fmtRel(rs.last_run))) : null,
       rp ? h('div', { class: 'muted small mt-8' }, 'Последний репрайсинг: ', rp.last_run ? h('span', { title: fmtDate(rp.last_run) }, fmtRel(rp.last_run)) : 'ещё не было',
         rp.last_result ? ` · переоценено ${rp.last_result.repriced ?? 0}` + ((rp.last_result.errors || []).length ? ` · ошибок ${rp.last_result.errors.length}` : '') : '',
-        rp.enabled === false ? ' · авторепрайсинг выключен' : '') : null);
+        rp.enabled === false ? ' · авторепрайсинг выключен' : '') : null,
+      ar ? h('div', { class: 'muted small mt-8' }, 'Автоответчик: ',
+        h('span', { class: ar.active ? 'success' : ar.enabled ? 'warning' : '' }, ar.active ? 'активен' : ar.enabled ? 'включён, не активен' : 'выключен'),
+        ar.last_run ? [' · проверка ', h('span', { title: fmtDate(ar.last_run) }, fmtRel(ar.last_run))] : null,
+        ` · ответов всего ${ar.replied_total ?? 0}`,
+        lr ? ` · последняя: чатов ${lr.checked ?? 0}, ответов ${lr.replied ?? 0}` : '',
+        ar.last_error ? h('span', { class: 'danger', title: ar.last_error }, ' · ошибка: ' + String(ar.last_error).slice(0, 80)) : null,
+        ' · ', h('a', { href: '#/chat' }, 'чаты →')) : null);
   };
   const renderEvents = () => {
     if (!extra.events.length) { replace(eventsBox, emptyState('Событий пока нет')); return; }
@@ -753,6 +771,8 @@ async function pageDashboard(root) {
   /** Один цикл опроса: статус + (после завершения поиска) пересчёт данных. */
   const tick = async () => {
     const st = await loadStatus();
+    // раз в 60 с обновляем бейдж чатов — только если страница чатов уже открывалась (не нагружаем FunPay зря)
+    if (++tickCount % 30 === 0 && state.chatUnread != null) API.get('/api/chat').then(setChatUnread).catch(() => {});
     const running = !!(st.search && st.search.running);
     if (wasRunning && !running) { toast('Поиск завершён', 'success'); await loadExtra(); }
     else if (running) { extra.events = await API.get('/api/events' + qs({ limit: 10 })).catch(() => extra.events); renderEvents(); }
@@ -1304,6 +1324,131 @@ function orderCard(o) {
     h('div', { class: 'order-side' },
       h('div', { class: 'price-ours' }, fmtMoney(o.price, o.currency)),
       note));
+}
+
+// ----------------------------------------------------------------------------
+// 6.5b Чаты FunPay (переписка с покупателями + состояние автоответчика)
+// ----------------------------------------------------------------------------
+
+async function pageChat(root) {
+  let chats = [], selected = null, history = [], q = '', noKey = null, scrollToEnd = true;
+  const listBox = h('div', { class: 'chat-items' });
+  const paneBox = h('div', { class: 'chat-pane' });
+  const threadBox = h('div', { class: 'chat-thread' });
+  const statusBar = h('div', { class: 'statusbar' });
+  const countEl = h('span', { class: 'muted small' });
+
+  // --- статус-бар автоответчика ---
+  const renderStatus = (st) => {
+    const a = (st && st.autoreply) || null;
+    replace(statusBar,
+      h('span', {}, h('b', {}, 'Автоответчик: '), a
+        ? h('span', { class: a.active ? 'success' : a.enabled ? 'warning' : 'muted' }, a.active ? 'вкл' : a.enabled ? 'вкл, не активен' : 'выкл')
+        : h('span', { class: 'muted' }, 'недоступен')),
+      a ? h('span', { class: 'muted' }, '· последняя проверка ', a.last_run ? h('span', { title: fmtDate(a.last_run) }, fmtRel(a.last_run)) : 'ещё не было') : null,
+      a ? h('span', { class: 'muted' }, `· ответов всего ${a.replied_total ?? 0}`) : null,
+      a && a.keywords != null ? h('span', { class: 'muted' }, `· правил: ${a.keywords}`) : null,
+      a && a.last_error ? h('span', { class: 'danger small', title: a.last_error }, '· ошибка: ' + String(a.last_error).slice(0, 60)) : null,
+      h('span', { class: 'spacer' }),
+      h('a', { class: 'small', href: '#/settings' }, 'Настройки автоответчика'),
+      h('button', { class: 'btn btn-sm', onclick: (e) => busy(e.currentTarget, async () => {
+        const r = await API.post('/api/autoreply/run');
+        const errs = r.errors || [];
+        toast(`Чаты проверены: ${r.checked ?? 0}, ответов отправлено: ${r.replied ?? 0}` + (errs.length ? ` · ошибки: ${errs.join('; ')}` : ''), errs.length ? 'warning' : 'success', 7000);
+        renderStatus(await loadStatus()); await loadChats();
+      }) }, 'Проверить чаты сейчас'));
+  };
+
+  // --- список чатов ---
+  const loadChats = async () => {
+    try { chats = await API.get('/api/chat'); noKey = null; setChatUnread(chats); }
+    catch (e) {
+      if (e.status === 400) { noKey = e.message; renderList(); renderPane(); return; }
+      toast('Чаты: ' + e.message, 'error'); return;
+    }
+    if (selected) selected = chats.find(c => c.chat_id === selected.chat_id) || selected;
+    renderList();
+  };
+  const renderList = () => {
+    const unread = chats.filter(c => c.unread).length;
+    countEl.textContent = chats.length ? `${chats.length} ${plural(chats.length, 'чат', 'чата', 'чатов')}${unread ? ' · непрочитанных: ' + unread : ''}` : '';
+    if (noKey) { replace(listBox, emptyState('Нет доступа к FunPay', noKey, '🔑'), h('div', { class: 'row', style: 'justify-content:center' }, h('a', { class: 'btn btn-primary btn-sm', href: '#/settings' }, 'Открыть настройки'))); return; }
+    const qq = q.trim().toLowerCase();
+    const list = chats.filter(c => !qq || ((c.name || '') + ' ' + (c.last_text || '')).toLowerCase().includes(qq));
+    replace(listBox, list.length ? list.map(c => h('button', { type: 'button', class: 'chat-item' + (c.unread ? ' unread' : '') + (selected && selected.chat_id === c.chat_id ? ' active' : ''), onclick: () => selectChat(c) },
+      h('span', { class: 'dot' }),
+      h('span', { style: 'min-width:0' }, h('div', { class: 'name' }, c.name || ('чат ' + c.chat_id)), h('div', { class: 'preview' }, c.last_text || '…')),
+      h('span', { class: 'time' }, chatTime(c.time))))
+      : emptyState(chats.length ? 'Ничего не найдено' : 'Чатов пока нет', chats.length ? '' : 'Покупатели ещё не писали', '💬'));
+  };
+
+  // --- переписка ---
+  const selectChat = async (c) => { selected = c; history = []; scrollToEnd = true; renderList(); renderPane(); await loadHistory(); };
+  const loadHistory = async () => {
+    if (!selected) return;
+    const id = selected.chat_id;
+    try {
+      const hist = await API.get(`/api/chat/${id}/history`);
+      if (selected && selected.chat_id === id) { history = hist; renderThread(); }
+    } catch (e) {
+      if (e.status === 400) { noKey = e.message; renderList(); renderPane(); return; }   // ключ пропал — показываем заглушку без тостов
+      toast('История чата: ' + e.message, 'error');
+    }
+  };
+  const renderThread = () => {
+    const atBottom = threadBox.scrollHeight - threadBox.scrollTop - threadBox.clientHeight < 40;
+    replace(threadBox, history.length ? history.map(m => {
+      if (m.system) return h('div', { class: 'msg system' }, m.text, m.ts ? h('div', { class: 'meta' }, chatTime(m.ts)) : null);
+      return h('div', { class: 'msg ' + (m.is_mine ? 'mine' : 'theirs') + (m.pending ? ' pending' : '') },
+        m.text ? h('div', {}, m.text) : null,
+        m.image_url ? h('div', {}, h('a', { href: m.image_url, target: '_blank', rel: 'noopener' }, '🖼 изображение')) : null,
+        h('div', { class: 'meta' }, h('span', {}, m.is_mine ? 'вы' : (m.author || 'покупатель')), m.ts ? h('span', { title: fmtDate(m.ts) }, chatTime(m.ts)) : null, m.pending ? h('span', {}, 'отправка…') : null));
+    }) : h('div', { class: 'msg system' }, 'Сообщений пока нет'));
+    if (atBottom || scrollToEnd) { threadBox.scrollTop = threadBox.scrollHeight; scrollToEnd = false; }
+  };
+  const renderPane = () => {
+    if (noKey) { replace(paneBox, h('div', { class: 'chat-empty' }, emptyState('Укажите golden_key FunPay', 'Чаты доступны после настройки доступа к FunPay', '🔑'))); return; }
+    if (!selected) { replace(paneBox, h('div', { class: 'chat-empty' }, emptyState('Выберите чат', 'Переписка с покупателем появится здесь', '💬'))); return; }
+    const c = selected;
+    const composer = h('textarea', { class: 'textarea', rows: 2, placeholder: 'Сообщение покупателю… (Ctrl+Enter — отправить)', 'aria-label': 'Сообщение',
+      onkeydown: (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } } });
+    const sendBtn = h('button', { class: 'btn btn-primary', onclick: () => send() }, 'Отправить');
+    const send = () => busy(sendBtn, async () => {
+      const text = composer.value.trim();
+      if (!text) throw new Error('Введите текст сообщения');
+      history.push({ id: 'tmp-' + Date.now(), text, is_mine: true, system: false, ts: new Date().toISOString(), pending: true });
+      scrollToEnd = true; renderThread();
+      try { await API.post(`/api/chat/${c.chat_id}/send`, { text }); composer.value = ''; }
+      catch (e) { history = history.filter(m => !m.pending); renderThread(); throw e; }
+      await loadHistory(); await loadChats(); composer.focus();
+    });
+    replace(paneBox,
+      h('div', { class: 'chat-head' },
+        h('div', { style: 'min-width:0' }, h('div', { class: 'bold ellipsis' }, c.name || ('чат ' + c.chat_id)), h('div', { class: 'muted small' }, 'chat_id ' + c.chat_id, c.time ? ' · ' + chatTime(c.time) : '')),
+        h('div', { class: 'btn-group' },
+          c.url ? h('a', { class: 'btn btn-sm', href: c.url, target: '_blank', rel: 'noopener' }, 'Открыть на FunPay ↗') : null,
+          h('button', { class: 'btn btn-sm', onclick: (e) => busy(e.currentTarget, loadHistory) }, '⟳ Обновить'))),
+      threadBox,
+      h('div', { class: 'chat-composer' }, composer, sendBtn));
+    renderThread();
+    composer.focus();
+  };
+
+  append(root,
+    h('div', { class: 'page-header' }, h('div', {}, h('h1', {}, 'Чаты'), h('div', { class: 'sub' }, 'Переписка с покупателями на FunPay')),
+      h('div', { class: 'page-actions' }, countEl, h('button', { class: 'btn', onclick: (e) => busy(e.currentTarget, loadChats) }, '⟳ Обновить'))),
+    statusBar,
+    h('div', { class: 'chat-layout' },
+      h('div', { class: 'chat-list' },
+        h('div', { class: 'search' }, h('input', { class: 'input sm', type: 'search', placeholder: 'Поиск по имени или тексту…', oninput: (e) => { q = e.target.value; renderList(); } })),
+        listBox),
+      paneBox));
+  renderStatus(state.status);
+  renderPane();
+  await loadChats();
+  // опрос: переписка каждые 15 с, список — каждые 30 с; при скрытой вкладке опрос приостанавливается
+  let n = 0;
+  startPolling(async () => { n++; if (selected && !noKey) await loadHistory(); if (n % 2 === 0) { await loadChats(); renderStatus(await loadStatus()); } }, 15000);
 }
 
 // ----------------------------------------------------------------------------
