@@ -1,0 +1,10 @@
+[project]
+name = "funpay-searcher"
+version = "0.1.0"
+description = "Поиск игровых аккаунтов на FunPay/Lolzteam и автоматическое создание лотов на FunPay"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"

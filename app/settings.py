@@ -1,0 +1,86 @@
+"""Настройки приложения: config/settings.yaml (создаётся из settings.example.yaml)."""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Optional
+
+import yaml
+from pydantic import BaseModel, Field
+
+ROOT = Path(__file__).resolve().parent.parent
+CONFIG_DIR = ROOT / "config"
+PROFILES_DIR = CONFIG_DIR / "profiles"
+DATA_DIR = ROOT / "data"
+SETTINGS_FILE = CONFIG_DIR / "settings.yaml"
+SETTINGS_EXAMPLE = CONFIG_DIR / "settings.example.yaml"
+
+
+class FunPaySettings(BaseModel):
+    golden_key: str = ""                 # cookie golden_key из браузера
+    user_agent: str = ""                 # User-Agent того же браузера
+    proxy: Optional[str] = None          # http://user:pass@host:port
+    request_delay: float = 1.5           # пауза между запросами, сек
+    timeout: float = 20.0
+    auto_publish: bool = False           # создавать лоты без подтверждения (по умолчанию — только черновики)
+
+
+class LolzSettings(BaseModel):
+    token: str = ""                      # https://lolz.team/account/api
+    proxy: Optional[str] = None
+    request_delay: float = 3.0           # лимит API: не чаще 1 запроса в 3 сек
+    timeout: float = 30.0
+
+
+class MonitorSettings(BaseModel):
+    enabled: bool = True
+    interval_minutes: int = 30           # как часто проверять доступность исходных объявлений
+    auto_deactivate: bool = True         # снимать наш лот, если исходник продан/исчез
+    auto_search_minutes: int = 0         # 0 — автопоиск по расписанию выключен
+
+
+class UISettings(BaseModel):
+    host: str = "127.0.0.1"
+    port: int = 8787
+    open_browser: bool = True
+    brand: str = "FunPay Searcher"
+
+
+class Settings(BaseModel):
+    funpay: FunPaySettings = Field(default_factory=FunPaySettings)
+    lolz: LolzSettings = Field(default_factory=LolzSettings)
+    monitor: MonitorSettings = Field(default_factory=MonitorSettings)
+    ui: UISettings = Field(default_factory=UISettings)
+    default_currency: str = "RUB"
+
+    # ---- persistence -------------------------------------------------
+    @classmethod
+    def load(cls, path: Path = SETTINGS_FILE) -> "Settings":
+        if not path.exists():
+            if SETTINGS_EXAMPLE.exists():
+                path.write_text(SETTINGS_EXAMPLE.read_text(encoding="utf-8"), encoding="utf-8")
+            else:
+                cls().save(path)
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        s = cls.model_validate(data)
+        # переменные окружения имеют приоритет (удобно для запуска без правки файла)
+        if os.getenv("FUNPAY_GOLDEN_KEY"):
+            s.funpay.golden_key = os.environ["FUNPAY_GOLDEN_KEY"]
+        if os.getenv("LOLZ_TOKEN"):
+            s.lolz.token = os.environ["LOLZ_TOKEN"]
+        return s
+
+    def save(self, path: Path = SETTINGS_FILE) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(self.model_dump(mode="json"), f, allow_unicode=True, sort_keys=False)
+
+    def masked(self) -> dict:
+        """Для отдачи в UI: секреты маскируются."""
+        d = self.model_dump(mode="json")
+        for sec, key in (("funpay", "golden_key"), ("lolz", "token")):
+            v = d[sec].get(key) or ""
+            d[sec][key + "_set"] = bool(v)
+            d[sec][key] = (v[:4] + "…" + v[-4:]) if len(v) > 12 else ("•" * len(v))
+        return d
