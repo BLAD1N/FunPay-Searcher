@@ -371,8 +371,9 @@ async function openLotPreview(found, afterSave) {
   const m = openModal({
     title: 'Предпросмотр лота', size: 'lg',
     body: [
-      h('div', { class: 'callout info mb-16' }, h('div', {}, h('b', {}, 'Исходник: '), extLink(l.url, l.title || l.url), ' — ', fmtMoney(l.price, l.currency),
-        l.seller_name ? [' · продавец ', extLink(l.seller_url, l.seller_name) || l.seller_name] : null)),
+      h('div', { class: 'callout info mb-16 row between' }, h('div', {}, h('b', {}, 'Исходник: '), extLink(l.url, l.title || l.url), ' — ', fmtMoney(l.price, l.currency),
+        l.seller_name ? [' · продавец ', extLink(l.seller_url, l.seller_name) || l.seller_name] : null),
+        l.source === 'funpay' && l.seller_url ? h('button', { type: 'button', class: 'btn btn-sm', onclick: () => openSellerModal(l.seller_url, l.seller_name) }, 'Продавец') : null),
       marketBox,
       form.el,
     ],
@@ -408,10 +409,75 @@ function marketBlock(mk) {
 async function openMarketModal(found) {
   const box = h('div', {}, loadingState());
   openModal({ title: 'Рынок: ' + ((found.listing && found.listing.title) || '').slice(0, 70), body: box });
-  try {
-    const mk = await API.get(`/api/found/${found.id}/market`);
-    replace(box, h('div', { class: 'muted small mb-8' }, 'Цена исходника: ' + fmtMoney(found.listing.price, found.listing.currency) + (found.suggested_price != null ? ' · наша цена: ' + fmtMoney(found.suggested_price) : '')), marketBlock(mk));
-  } catch (e) { replace(box, h('span', { class: 'danger' }, e.message)); }
+  // статистика рынка и история цены грузятся параллельно; ошибка одной не ломает другую
+  const [mk, hs] = await Promise.all([
+    API.get(`/api/found/${found.id}/market`).catch(e => ({ error: e.message })),
+    API.get(`/api/found/${found.id}/history`).catch(e => ({ error: e.message })),
+  ]);
+  replace(box,
+    h('div', { class: 'muted small mb-8' }, 'Цена исходника: ' + fmtMoney(found.listing.price, found.listing.currency) + (found.suggested_price != null ? ' · наша цена: ' + fmtMoney(found.suggested_price) : '')),
+    historyBlock(hs),
+    h('div', { class: 'mt-8' }, mk.error ? h('div', { class: 'result-box bad' }, h('span', { class: 'danger' }, mk.error)) : marketBlock(mk)));
+}
+
+/** История цены исходника: спарклайн + «first → last (±P%)». */
+function historyBlock(hs) {
+  if (!hs || hs.error) return h('div', { class: 'result-box' }, h('div', { class: 'label mb-8' }, 'История цены исходника'), h('span', { class: 'danger small' }, (hs && hs.error) || 'нет данных'));
+  const pts = (hs.history || []).filter(p => p && isFinite(Number(p.price)));
+  const pct = Number(hs.change_percent) || 0;
+  const cls = pct > 0 ? 'danger' : pct < 0 ? 'success' : 'muted';
+  return h('div', { class: 'result-box' },
+    h('div', { class: 'label mb-8' }, 'История цены исходника'),
+    pts.length < 2
+      ? h('div', { class: 'muted small' }, 'цена не менялась' + (hs.last != null ? ` (${fmtMoney(hs.last)})` : ''))
+      : [sparkline(pts),
+        h('div', { class: 'small mt-8' }, 'Цена исходника: ', fmtMoney(hs.first), ' → ', h('b', {}, fmtMoney(hs.last)), ' ', h('span', { class: cls }, `(${fmtPct(pct)})`),
+          h('span', { class: 'muted' }, ` · ${pts.length} ${plural(pts.length, 'точка', 'точки', 'точек')} с ${fmtDate(pts[0].ts)}`))]);
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs = {}, ...children) {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  for (const c of children) el.append(c);
+  return el;
+}
+/** Миниатюрный график цены (inline SVG, без библиотек). */
+function sparkline(points, w = 280, hgt = 56) {
+  const ps = points.map(p => Number(p.price));
+  const min = Math.min(...ps), max = Math.max(...ps), span = max - min || 1, pad = 6;
+  const xy = ps.map((v, i) => [pad + i * (w - 2 * pad) / (ps.length - 1), hgt - pad - (v - min) / span * (hgt - 2 * pad)]);
+  const d = xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const [lx, ly] = xy[xy.length - 1];
+  return svgEl('svg', { class: 'spark', viewBox: `0 0 ${w} ${hgt}`, width: w, height: hgt, role: 'img', 'aria-label': `История цены: от ${fmtMoney(ps[0])} до ${fmtMoney(ps[ps.length - 1])}` },
+    svgEl('polyline', { points: d, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }),
+    svgEl('circle', { cx: lx.toFixed(1), cy: ly.toFixed(1), r: 3.5, fill: 'var(--accent)' }),
+    svgEl('text', { x: w - pad, y: 11, 'text-anchor': 'end', class: 'spark-label' }, fmtMoney(max)),
+    svgEl('text', { x: w - pad, y: hgt - 1, 'text-anchor': 'end', class: 'spark-label' }, fmtMoney(min)));
+}
+
+/** Карточка продавца FunPay (GET /api/funpay/seller?url=): имя, отзывы, онлайн, его лоты. */
+async function openSellerModal(sellerUrl, sellerName) {
+  const box = h('div', {}, loadingState());
+  const m = openModal({ title: 'Продавец FunPay' + (sellerName ? ': ' + sellerName : ''), size: 'lg', body: box });
+  let s;
+  try { s = await API.get('/api/funpay/seller' + qs({ url: sellerUrl })); }
+  catch (e) { toast('Продавец: ' + e.message, 'error'); m.close(); return; }
+  const lots = s.lots || [];
+  replace(box,
+    h('div', { class: 'row between mb-16' },
+      h('div', {}, h('h2', {}, s.name || sellerName || ('#' + s.id)), h('div', { class: 'muted small' }, 'id ' + (s.id ?? '—'), ' · ', extLink(sellerUrl, 'открыть профиль ↗'))),
+      h('div', { class: 'chip-row' },
+        h('span', { class: 'chip soft' }, 'отзывов: ' + fmtNum(s.reviews)),
+        h('span', { class: 'chip ' + (s.online ? 'success' : 'neutral') }, s.online ? 'онлайн' : 'офлайн'),
+        h('span', { class: 'chip soft' }, 'лотов: ' + (s.lots_count ?? lots.length)))),
+    lots.length ? h('div', { class: 'scroll-y' }, h('table', { class: 'table compact' },
+      h('thead', {}, h('tr', {}, h('th', {}, 'Лот'), h('th', {}, 'Регион'), h('th', { class: 'num' }, 'Цена'))),
+      h('tbody', {}, lots.map(l => h('tr', {},
+        h('td', { class: 'cell-title' }, h('div', { class: 'ellipsis', title: l.title }, extLink(l.url, l.title || l.url) || (l.title || '—'))),
+        h('td', { class: 'muted small' }, l.region || '—'),
+        h('td', { class: 'num bold' }, fmtMoney(l.price, l.currency)))))))
+      : emptyState('У продавца нет активных лотов'));
 }
 
 /** Сводка результата поднятия лотов для уведомления. */
@@ -531,6 +597,10 @@ function updateSidebar(st) {
   tg.classList.toggle('ok', tgOn); tg.classList.remove('err');
   tg.title = tgOn ? 'Telegram: уведомления включены' : 'Telegram: уведомления выключены (см. Настройки)';
   $('#conn-telegram-user').textContent = tgOn ? 'вкл' : 'выкл';
+  const arOn = !!(st.autoreply && st.autoreply.enabled), ar = $('#conn-autoreply');
+  ar.classList.toggle('ok', arOn); ar.classList.remove('err');
+  ar.title = arOn ? 'Автоответчик в чате FunPay включён' : 'Автоответчик выключен (см. Настройки)';
+  $('#conn-autoreply-user').textContent = arOn ? (st.autoreply.running ? 'работает' : 'вкл') : 'выкл';
 }
 function setBadge(sel, n) { const el = $(sel); el.textContent = n; el.hidden = !n; }
 function setConn(sel, name, a) {
@@ -633,7 +703,7 @@ async function pageDashboard(root) {
         h('td', { class: 'num' }, (r.errors || []).length ? h('span', { class: 'chip danger', title: r.errors.join('\n') }, r.errors.length) : h('span', { class: 'muted' }, '—'))))))));
   };
   const renderMonitor = (st) => {
-    const mo = st.monitor || {}, rs = st.raise || null;
+    const mo = st.monitor || {}, rs = st.raise || null, rp = st.reprice || null;
     replace(monitorBox,
       h('div', { class: 'grid grid-2 mb-16' },
         h('div', {}, h('div', { class: 'stat-label' }, 'Последняя проверка'), h('div', { class: 'bold', title: fmtDate(mo.last_run) }, mo.last_run ? fmtRel(mo.last_run) : 'ещё не было')),
@@ -646,12 +716,21 @@ async function pageDashboard(root) {
             toast(raiseSummary(r), (r.errors || []).length ? 'warning' : 'success', 7000);
             await tick();
           }) }, '⬆ Поднять лоты'),
+          h('button', { class: 'btn', title: 'Пересчитать цены наших лотов по текущим ценам исходников', onclick: (e) => busy(e.currentTarget, async () => {
+            const r = await API.post('/api/reprice');
+            const errs = r.errors || [];
+            toast(`Репрайсинг: переоценено ${r.repriced ?? 0}, обновлено рекомендаций ${r.suggested_updated ?? 0}, проверено ${r.checked ?? 0}` + (errs.length ? ` · ошибки: ${errs.join('; ')}` : ''), errs.length ? 'warning' : 'success', 7000);
+            await loadExtra(); await tick();
+          }) }, '↻ Пересчитать цены'),
           h('button', { class: 'btn', disabled: !!mo.running, onclick: (e) => busy(e.currentTarget, async () => {
             const r = await API.post('/api/monitor/run');
             toast(`Проверено исходников: ${r.checked ?? 0}, недоступно: ${r.unavailable ?? 0}`, (r.unavailable || 0) > 0 ? 'warning' : 'success');
             await loadExtra(); await tick();
           }) }, 'Проверить сейчас'))),
-      rs && rs.last_run ? h('div', { class: 'muted small mt-8' }, 'Последнее поднятие лотов: ', h('span', { title: fmtDate(rs.last_run) }, fmtRel(rs.last_run))) : null);
+      rs && rs.last_run ? h('div', { class: 'muted small mt-8' }, 'Последнее поднятие лотов: ', h('span', { title: fmtDate(rs.last_run) }, fmtRel(rs.last_run))) : null,
+      rp ? h('div', { class: 'muted small mt-8' }, 'Последний репрайсинг: ', rp.last_run ? h('span', { title: fmtDate(rp.last_run) }, fmtRel(rp.last_run)) : 'ещё не было',
+        rp.last_result ? ` · переоценено ${rp.last_result.repriced ?? 0}` + ((rp.last_result.errors || []).length ? ` · ошибок ${rp.last_result.errors.length}` : '') : '',
+        rp.enabled === false ? ' · авторепрайсинг выключен' : '') : null);
   };
   const renderEvents = () => {
     if (!extra.events.length) { replace(eventsBox, emptyState('Событий пока нет')); return; }
@@ -766,6 +845,7 @@ function foundCard(f, ctx) {
       ctx.update();
     }),
     act('Рынок', '', () => openMarketModal(f)),
+    l.source === 'funpay' && l.seller_url ? act('Продавец', '', () => openSellerModal(l.seller_url, l.seller_name)) : null,
     f.status === 'ignored'
       ? act('Вернуть', '', async () => { await API.post(`/api/found/${f.id}/status`, { status: 'candidate' }); toast('Возвращено в кандидаты'); ctx.reload(); })
       : act('Скрыть', '', async () => { await API.post(`/api/found/${f.id}/status`, { status: 'ignored' }); toast('Объявление скрыто'); ctx.reload(); }),
@@ -847,13 +927,21 @@ function lotRow(lot, reload) {
     h('td', {}, statusChip(lot.status, LOT_STATUS)),
     h('td', { class: 'cell-title' },
       h('div', { class: 'bold ellipsis', title: lot.title_ru }, lot.title_ru || '(без заголовка)'),
-      h('div', { class: 'muted small' }, '#' + lot.id, lot.profile_name ? ' · ' + lot.profile_name : '', ' · ', fmtRel(lot.updated_at)),
+      h('div', { class: 'muted small' }, '#' + lot.id, lot.profile_name ? ' · ' + lot.profile_name : '', ' · ', fmtRel(lot.updated_at), priceChangedChip(lot)),
       h('div', { class: 'small links' }, lot.funpay_url ? [extLink(lot.funpay_url, 'на FunPay ↗'), ' · '] : null, extLink(lot.source_url, 'исходник ↗'), lot.seller_url ? [' · ', extLink(lot.seller_url, 'продавец ↗')] : null),
       lot.error ? h('div', { class: 'danger small' }, lot.error) : null),
     h('td', { class: 'num' }, h('div', { class: 'bold' }, fmtMoney(lot.price)), h('div', { class: 'small muted nowrap' }, 'из ' + fmtMoney(lot.source_price))),
     h('td', { class: 'num ' + (margin >= 0 ? 'success' : 'danger') }, fmtMoney(margin), h('div', { class: 'small muted' }, fmtPct(marginPct))),
     h('td', {}, availIndicator(lot.source_available, lot.source_checked_at)),
     h('td', { class: 'actions' }, h('div', { class: 'btn-group', style: 'justify-content:flex-end' }, actions)));
+}
+
+/** Чип «цена исходника изменилась»: текущая цена находки отличается от source_price лота более чем на 0,5 %. */
+function priceChangedChip(lot) {
+  const cur = lot.found && lot.found.listing ? Number(lot.found.listing.price) : null;
+  if (cur == null || !isFinite(cur) || !lot.source_price) return null;
+  if (Math.abs(cur - lot.source_price) / lot.source_price <= 0.005) return null;
+  return h('span', { class: 'chip warning', style: 'margin-left:6px', title: `исходник сейчас ${fmtMoney(cur)}, было ${fmtMoney(lot.source_price)}` }, 'цена исходника изменилась');
 }
 
 // ----------------------------------------------------------------------------
@@ -1226,8 +1314,18 @@ async function pageSettings(root) {
   const s = await API.get('/api/settings');
   const model = clone(s);
   model.telegram = model.telegram || { enabled: false, chat_id: '', notify_new_candidates: true, notify_source_sold: true, notify_new_orders: true, notify_errors: true };
+  model.autoreply = model.autoreply || { enabled: false, poll_seconds: 15, reply_once_per_chat_hours: 12, greeting: '', keywords: {}, ignore_if_online_minutes: 0 };
+  model.autoreply.keywords = model.autoreply.keywords || {};
   const secrets = { golden_key: '', token: '', bot_token: '' };
-  const authBox = h('div'), tgBox = h('div');
+  const authBox = h('div'), tgBox = h('div'), replyBox = h('div');
+  // тестер автоответчика: сообщение покупателя -> ответ по сохранённым правилам
+  const tester = { text: '' };
+  const runReplyPreview = async () => {
+    if (!tester.text.trim()) throw new Error('Введите сообщение покупателя');
+    const r = await API.post('/api/autoreply/preview', { text: tester.text });
+    replace(replyBox, h('div', { class: 'result-box ' + (r.reply ? 'ok' : '') }, h('div', { class: 'label mb-8' }, 'Ответ автоответчика'),
+      r.reply ? h('div', { style: 'white-space:pre-wrap' }, r.reply) : h('span', { class: 'muted' }, 'автоответчик не ответил бы на это сообщение')));
+  };
   const form = h('div', { class: 'stack' },
     h('div', { class: 'card' }, h('div', { class: 'card-header' }, h('h2', {}, h('span', { class: 'row' }, sourceChip('funpay'), 'FunPay')), s.funpay.golden_key_set ? h('span', { class: 'chip success' }, 'golden_key установлен') : h('span', { class: 'chip warning' }, 'golden_key не задан')),
       h('div', { class: 'form-grid' },
@@ -1253,7 +1351,9 @@ async function pageSettings(root) {
         field('Интервал проверки, мин', numberInput(model, 'monitor.interval_minutes', { step: 1, min: 1 })),
         field('Автопоиск каждые N минут', numberInput(model, 'monitor.auto_search_minutes', { step: 1, min: 0 }), '0 — автопоиск выключен'),
         field('Проверять заказы каждые N минут', numberInput(model, 'monitor.orders_check_minutes', { step: 1, min: 0 }), 'Новые продажи на FunPay; 0 — не проверять'),
-        field('Автоподнятие лотов каждые N часов', numberInput(model, 'monitor.auto_raise_hours', { step: 0.5, min: 0 }), 'Поднимать наши лоты вверх списка; 0 — выключено'))),
+        field('Автоподнятие лотов каждые N часов', numberInput(model, 'monitor.auto_raise_hours', { step: 0.5, min: 0 }), 'Поднимать наши лоты вверх списка; 0 — выключено'),
+        h('div', { class: 'span-2' }, checkInput(model, 'monitor.auto_reprice', 'Репрайсинг: пересчитывать цену лота при изменении цены исходника')),
+        field('Игнорировать изменения меньше N %', numberInput(model, 'monitor.reprice_min_change_percent', { step: 0.5, min: 0 }), 'Мелкие колебания цены исходника не меняют цену лота'))),
     h('div', { class: 'card' }, h('div', { class: 'card-header' }, h('h2', {}, '✈ Telegram-уведомления'), model.telegram.bot_token_set ? h('span', { class: 'chip success' }, 'токен бота установлен') : h('span', { class: 'chip warning' }, 'токен бота не задан')),
       h('div', { class: 'form-grid' },
         h('div', { class: 'span-2' }, checkInput(model, 'telegram.enabled', 'Отправлять уведомления в Telegram')),
@@ -1265,7 +1365,9 @@ async function pageSettings(root) {
           checkInput(model, 'telegram.notify_new_candidates', 'Новые кандидаты после поиска'),
           checkInput(model, 'telegram.notify_source_sold', 'Исходник продан / лот снят'),
           checkInput(model, 'telegram.notify_new_orders', 'Новые заказы'),
-          checkInput(model, 'telegram.notify_errors', 'Ошибки')),
+          checkInput(model, 'telegram.notify_errors', 'Ошибки'),
+          checkInput(model, 'telegram.notify_price_changes', 'Изменения цен / репрайсинг'),
+          checkInput(model, 'telegram.notify_messages', 'Сообщения покупателей')),
         h('div', { class: 'span-2 row between' }, h('span', { class: 'muted small' }, 'Проверка отправит тестовое сообщение в чат. Сначала сохраните настройки.'),
           h('button', { class: 'btn', onclick: (e) => busy(e.currentTarget, async () => {
             try {
@@ -1276,6 +1378,25 @@ async function pageSettings(root) {
             loadStatus().catch(() => {});
           }) }, 'Проверить Telegram')),
         h('div', { class: 'span-2' }, tgBox))),
+    h('div', { class: 'card' }, h('div', { class: 'card-header' }, h('h2', {}, '💬 Автоответчик в чате FunPay'),
+      h('button', { class: 'btn', title: 'Проверить новые сообщения покупателей и ответить по правилам', onclick: (e) => busy(e.currentTarget, async () => {
+        const r = await API.post('/api/autoreply/run');
+        const errs = r.errors || [];
+        toast(`Чаты проверены: ${r.checked ?? 0}, ответов отправлено: ${r.replied ?? 0}` + (errs.length ? ` · ошибки: ${errs.join('; ')}` : ''), errs.length ? 'warning' : 'success', 7000);
+        loadStatus().catch(() => {});
+      }) }, 'Проверить чаты сейчас')),
+      h('div', { class: 'form-grid' },
+        h('div', { class: 'span-2' }, checkInput(model, 'autoreply.enabled', 'Отвечать покупателям в чате автоматически')),
+        field('Опрашивать чаты каждые N секунд', numberInput(model, 'autoreply.poll_seconds', { step: 1, min: 5 })),
+        field('Повторный ответ в том же чате не чаще, чем раз в N часов', numberInput(model, 'autoreply.reply_once_per_chat_hours', { step: 0.5, min: 0 })),
+        field('Приветствие (ответ по умолчанию)', textareaInput(model, 'autoreply.greeting', { rows: 3, placeholder: 'Здравствуйте! Аккаунт в наличии ✅ …' }), 'Отправляется на сообщение покупателя, если не подошло ни одно ключевое слово', 'span-2'),
+        field('Ответы по ключевым словам', kvEditor(model.autoreply.keywords, { keyPh: 'слова через |, напр. в наличии|есть?', valPh: 'ответ покупателю', addLabel: 'Добавить правило' }),
+          'Если сообщение содержит одно из слов (через |) — отправляется этот ответ', 'span-2'),
+        field('Не отвечать, если я был онлайн N минут назад', numberInput(model, 'autoreply.ignore_if_online_minutes', { step: 1, min: 0 }), '0 — отвечать всегда'),
+        field('Проверка ответа', h('div', { class: 'input-group' },
+          h('input', { class: 'input', placeholder: 'Сообщение покупателя, напр. «Аккаунт в наличии?»', oninput: (e) => { tester.text = e.target.value; }, onkeydown: (e) => { if (e.key === 'Enter') busy(null, runReplyPreview); } }),
+          h('button', { type: 'button', class: 'btn', onclick: (e) => busy(e.currentTarget, runReplyPreview) }, 'Проверить ответ')), 'По сохранённым правилам — сначала сохраните настройки'),
+        h('div', { class: 'span-2' }, replyBox))),
     h('div', { class: 'card' }, h('div', { class: 'card-header' }, h('h2', {}, 'Интерфейс')),
       h('div', { class: 'form-grid-3' },
         field('Название', textInput(model, 'ui.brand')),

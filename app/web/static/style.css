@@ -381,6 +381,11 @@ details.dropdown .dropdown-panel { position: absolute; top: calc(100% + 6px); le
 .result-box.bad { border-color: rgba(255, 92, 108, 0.4); }
 .list-plain { margin: 4px 0 0; padding-left: 18px; color: var(--text-2); }
 
+/* Спарклайн истории цены (inline SVG) и прокручиваемые списки в модалках */
+.spark { display: block; max-width: 100%; height: auto; }
+.spark-label { font-size: 10px; fill: var(--muted); font-family: var(--font); }
+.scroll-y { max-height: 420px; overflow: auto; }
+
 /* Список категорий в модалке */
 .picker-list { max-height: 420px; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
 .picker-group { padding: 8px 8px 4px; font-weight: 600; color: var(--text-2); font-size: 13px; position: sticky; top: 0; background: var(--surface); }
