@@ -230,3 +230,26 @@ def test_seller_and_history(client):
     r = client.get("/api/funpay/seller", params={"url": "https://funpay.com/users/10/"}).json()
     assert r["id"] == "10" and r["lots_count"] == 0
     assert client.get("/api/funpay/seller").status_code == 400
+
+
+def test_settings_roundtrip_keeps_all_secrets_and_origin_guard(client):
+    client.ctx.settings.telegram.bot_token = "123:ABCDEFGHIJKLMNOP"
+    masked = client.get("/api/settings").json()
+    assert "…" in masked["telegram"]["bot_token"]
+    client.put("/api/settings", json=masked)
+    assert client.ctx.settings.telegram.bot_token == "123:ABCDEFGHIJKLMNOP"
+    assert client.ctx.settings.funpay.golden_key == "test-key"
+    # CSRF: изменяющий запрос с чужого сайта отклоняется, со своего — проходит
+    r = client.post("/api/search/cancel", headers={"origin": "https://evil.example"})
+    assert r.status_code == 403
+    r = client.post("/api/search/cancel", headers={"origin": "http://testserver"})
+    assert r.status_code == 200
+
+
+def test_csv_export_neutralises_formulas(client):
+    from app.models import Found, Listing, MatchResult
+    client.ctx.storage.upsert_found(Found(profile_id="wot_test", match=MatchResult(matched=True, score=1),
+                                          listing=Listing(source="funpay", source_id="x1", url="u", price=10,
+                                                          title="=HYPERLINK(\"http://evil\")", seller_name="+cmd")))
+    body = client.get("/api/export/found.csv").content.decode("utf-8-sig")
+    assert "'=HYPERLINK" in body and "'+cmd" in body

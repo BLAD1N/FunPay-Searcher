@@ -88,9 +88,15 @@ class SearchService:
                 self.ctx.log("search", f"{name}: не задан токен/cookie в настройках — источник пропущен", level="warning")
         jobs: list[tuple[Profile, str]] = []
         for p in profiles:
-            if "funpay" in wanted_sources and p.funpay().enabled:
+            try:
+                fp_enabled, lz_enabled = p.funpay().enabled, p.lolz().enabled
+            except Exception as e:  # noqa: BLE001 — некорректный YAML одного профиля не должен ломать остальные
+                self.ctx.log("search", f"{p.name}: некорректные настройки источников — профиль пропущен ({e})",
+                             level="error")
+                continue
+            if "funpay" in wanted_sources and fp_enabled:
                 jobs.append((p, "funpay"))
-            if "lolz" in wanted_sources and p.lolz().enabled:
+            if "lolz" in wanted_sources and lz_enabled:
                 jobs.append((p, "lolz"))
         self.progress.update({"done": 0, "total": len(jobs), "fetched": 0, "matched": 0, "new": 0})
         self.ctx.log("search", f"старт поиска: профилей {len(profiles)}, задач {len(jobs)}")

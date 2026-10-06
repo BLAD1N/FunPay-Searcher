@@ -38,3 +38,11 @@ def test_safe_eval_rejects_code():
         safe_eval("price.__class__", {"price": 1})
     assert safe_eval("max(price * 1.5, price + 3000)", {"price": 1000}) == 4000
     assert safe_eval("price * 2 if price < 10000 else price * 1.5", {"price": 20000}) == 30000
+
+
+def test_price_ending_never_below_cost():
+    rule = PricingRule(mode="percent", percent=3, round_to=100, price_ending=0)
+    assert calculate_price(10500, rule) > 10500
+    rule = PricingRule(mode="percent", percent=1, round_to=100, price_ending=990)
+    v = calculate_price(14995, rule)
+    assert v > 14995 and int(v) % 1000 == 990

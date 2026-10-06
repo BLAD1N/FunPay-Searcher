@@ -303,7 +303,7 @@ class LolzSource(BaseSource):
                     self.log.warning("Lolzteam: хост %s недоступен (%s), пробуем резервный", host, e)
                     continue
                 raise SourceError(f"ошибка сети при запросе к Lolzteam: {e}") from e
-            if response.status_code == 404 and not self._host_confirmed and has_more:
+            if response.status_code == 404 and not self._host_confirmed and has_more and path in ("/me", "/category"):
                 self.log.warning("Lolzteam: хост %s ответил 404 на %s, пробуем резервный", host, path)
                 continue
             if response.status_code != 404:

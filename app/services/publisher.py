@@ -27,7 +27,10 @@ class PublisherService:
             sid = found.listing.attributes.get("subcategory_id")
             if sid:
                 return int(sid)
-        cfg = profile.funpay()
+        try:
+            cfg = profile.funpay()
+        except Exception:  # noqa: BLE001
+            return None
         if cfg.subcategory_id:
             return int(cfg.subcategory_id)
         if cfg.subcategory_ids:
@@ -88,9 +91,24 @@ class PublisherService:
         return lot
 
     # --------------------------------------------------------- publish
+    def _ensure_lot_id(self, lot: OurLot) -> int:
+        """Вернуть id лота на FunPay; если он не был определён при создании — найти по названию."""
+        if lot.funpay_lot_id:
+            return int(lot.funpay_lot_id)
+        if lot.subcategory_id and hasattr(self.ctx.funpay, "list_my_lots"):
+            for mine in self.ctx.funpay.list_my_lots(lot.subcategory_id):
+                if (mine.title or "").strip() == (lot.title_ru or "").strip():
+                    lot.funpay_lot_id = int(mine.source_id)
+                    lot.funpay_url = mine.url
+                    self.ctx.storage.save_lot(lot)
+                    return lot.funpay_lot_id
+        raise RuntimeError("не удалось определить id лота на FunPay — измените лот вручную на сайте")
+
     def publish(self, lot: OurLot) -> OurLot:
         if not self.ctx.settings.funpay.golden_key:
             raise RuntimeError("не задан golden_key FunPay в настройках")
+        if lot.status == LotStatus.ACTIVE and not lot.funpay_lot_id:
+            raise RuntimeError("лот уже опубликован, но его id неизвестен — повторная публикация создаст дубль")
         if not lot.subcategory_id:
             raise RuntimeError("не определена категория FunPay для публикации (укажите funpay_subcategory_id в шаблоне лота)")
         profile = self._profile(lot.profile_id)
@@ -109,9 +127,15 @@ class PublisherService:
                     extra_fields=lot.fields)
                 lot.funpay_lot_id = result.get("lot_id")
                 lot.funpay_url = result.get("url") or (
-                    f"https://funpay.com/lots/offer?id={lot.funpay_lot_id}" if lot.funpay_lot_id else None)
+                    f"https://funpay.com/lots/offer?id={lot.funpay_lot_id}" if lot.funpay_lot_id
+                    else f"https://funpay.com/lots/{lot.subcategory_id}/trade")
             lot.status = LotStatus.ACTIVE
             lot.error = None
+            if not lot.funpay_lot_id:
+                # лот создан, но его id не найден в списке наших лотов — предупреждаем, повторная публикация запрещена
+                lot.error = ("лот создан на FunPay, но его id не удалось определить автоматически; "
+                             "проверьте список лотов на FunPay. Повторно не публикуйте — будет дубль.")
+                self.ctx.log("lots", f"лот #{lot.id}: {lot.error}", level="warning")
             self.ctx.storage.set_found_status(lot.found_id, FoundStatus.PUBLISHED)
             self.ctx.log("lots", f"лот #{lot.id} опубликован на FunPay (id {lot.funpay_lot_id}) за {lot.price:.0f}")
         except Exception as e:  # noqa: BLE001
@@ -122,6 +146,7 @@ class PublisherService:
 
     def update(self, lot: OurLot, changes: dict) -> OurLot:
         self._apply_overrides(lot, changes)
+        # снятый лот не трогаем на FunPay: правки уедут при активации (set_active отправляет все поля)
         if lot.status == LotStatus.ACTIVE and lot.funpay_lot_id:
             try:
                 self.ctx.funpay.update_lot(
@@ -136,9 +161,17 @@ class PublisherService:
         return self.ctx.storage.save_lot(lot)
 
     def set_active(self, lot: OurLot, active: bool, reason: str = "") -> OurLot:
-        if lot.funpay_lot_id and lot.subcategory_id:
+        if lot.status in (LotStatus.ACTIVE, LotStatus.DEACTIVATED, LotStatus.SOLD) or lot.funpay_lot_id:
             try:
-                self.ctx.funpay.set_lot_active(lot.funpay_lot_id, lot.subcategory_id, active)
+                lot_id = self._ensure_lot_id(lot)
+                if active:
+                    # при активации отправляем все поля: правки, сделанные в снятом лоте, должны попасть на FunPay
+                    self.ctx.funpay.update_lot(
+                        lot_id, lot.subcategory_id, title_ru=lot.title_ru, title_en=lot.title_en,
+                        description_ru=lot.description_ru, description_en=lot.description_en, price=lot.price,
+                        active=True, extra_fields=lot.fields)
+                else:
+                    self.ctx.funpay.set_lot_active(lot_id, lot.subcategory_id, False)
                 lot.error = None
             except Exception as e:  # noqa: BLE001
                 lot.error = str(e)

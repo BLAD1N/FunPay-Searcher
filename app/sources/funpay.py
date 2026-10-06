@@ -369,7 +369,7 @@ class FunPaySource(BaseSource):
             time.sleep(delay - elapsed)
 
     def _request(self, method: str, path: str, *, params: Optional[dict] = None, data: Optional[dict] = None,
-                 headers: Optional[dict] = None, ajax: bool = False) -> httpx.Response:
+                 headers: Optional[dict] = None, ajax: bool = False, retry: bool = True) -> httpx.Response:
         """Запрос к FunPay с cookie/заголовками, паузой, повторами при сетевых ошибках и 5xx.
 
         403 -> :class:`AuthError`. Редиректы не выполняются (их интерпретирует вызывающий код).
@@ -387,7 +387,7 @@ class FunPaySource(BaseSource):
             hdrs.update(headers)
         last_error: Optional[Exception] = None
         with self._lock:
-            for attempt in range(1, self.retries + 2):
+            for attempt in range(1, (self.retries if retry else 0) + 2):
                 self._throttle()
                 try:
                     self._last_request_at = time.monotonic()
@@ -984,7 +984,8 @@ class FunPaySource(BaseSource):
 
     def _save_lot_form(self, fields: dict[str, str]) -> dict:
         """POST ``/lots/offerSave``. Успех — ``{"done": true}``; ошибка — ``{"error": "..."}`` -> SourceError."""
-        response = self._request("POST", "/lots/offerSave", data=fields, ajax=True,
+        # без повторов: если FunPay сохранил лот и упал, повтор создаст дубль
+        response = self._request("POST", "/lots/offerSave", data=fields, ajax=True, retry=False,
                                  headers={"content-type": "application/x-www-form-urlencoded; charset=UTF-8"})
         if response.status_code != 200:
             raise SourceError(f"FunPay вернул {response.status_code} при сохранении лота")
@@ -1000,8 +1001,8 @@ class FunPaySource(BaseSource):
             raise SourceError("FunPay вернул неожиданный (не JSON) ответ при сохранении лота")
         if not isinstance(payload, dict):
             raise SourceError("FunPay вернул неожиданный ответ при сохранении лота")
-        if payload.get("error"):
-            msg = str(payload.get("error"))
+        if payload.get("error") or payload.get("errors"):
+            msg = str(payload.get("error") or "ошибка сохранения лота")
             errs = payload.get("errors")
             if isinstance(errs, dict):
                 msg += " (" + "; ".join(f"{k}: {v}" for k, v in errs.items()) + ")"

@@ -85,4 +85,7 @@ def calculate_price(source_price: float, rule: PricingRule) -> float:
     value = _round(value, rule)
     if value <= p:  # никогда не продаём дешевле закупки
         value = _round(p + max(rule.min_margin, rule.round_to or 1), rule)
+        step = 1000.0 if rule.price_ending is not None else float(max(rule.round_to or 0, 1))
+        while value <= p:
+            value += step
     return max(value, 1.0)

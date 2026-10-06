@@ -184,14 +184,24 @@ class OrdersService:
     def _process(self, raw: dict, lots: list[OurLot], known: dict[str, Order], now: datetime, result: dict) -> None:
         storage = self.ctx.storage
         order = self.to_order(raw)
-        lot = self.match_lot(order, lots)
-        if lot is not None:
-            order.lot_id = lot.id
-            order.source_url = lot.source_url or None
-            order.source_price = lot.source_price or None
-            result["matched"] += 1
-
         previous = known.get(order.funpay_order_id)
+        lot: Optional[OurLot] = None
+        if previous is not None:
+            # известный заказ: привязку не пересматриваем, иначе старый заказ «продаст» новый лот с тем же названием
+            if previous.lot_id:
+                lot = next((l for l in lots if l.id == previous.lot_id), None)
+                order.lot_id = previous.lot_id
+                order.source_url = previous.source_url
+                order.source_price = previous.source_price
+                result["matched"] += 1
+        else:
+            lot = self.match_lot(order, lots)
+            if lot is not None:
+                order.lot_id = lot.id
+                order.source_url = lot.source_url or None
+                order.source_price = lot.source_price or None
+                result["matched"] += 1
+
         saved, is_new = storage.upsert_order(order)
         known[saved.funpay_order_id] = saved
 
@@ -211,7 +221,8 @@ class OrdersService:
                          data={"order_id": order.funpay_order_id})
 
         # лот продан: оплаченный/закрытый заказ по активному лоту (FunPay сам снимает лот после продажи)
-        if lot is not None and saved.status in (OrderStatus.PAID, OrderStatus.CLOSED) and lot.status == LotStatus.ACTIVE:
+        if (is_new and lot is not None and saved.status in (OrderStatus.PAID, OrderStatus.CLOSED)
+                and lot.status == LotStatus.ACTIVE):
             lot.status = LotStatus.SOLD
             lot.error = None
             storage.save_lot(lot)

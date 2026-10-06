@@ -120,6 +120,20 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
             except Exception:  # noqa: BLE001
                 pass
 
+    @app.middleware("http")
+    async def _same_origin_guard(request: Request, call_next):
+        """Защита от CSRF с чужих сайтов: изменяющие запросы к /api принимаем только со своего адреса."""
+        if request.method not in ("GET", "HEAD", "OPTIONS") and request.url.path.startswith("/api/"):
+            origin = request.headers.get("origin") or request.headers.get("referer")
+            if origin:
+                from urllib.parse import urlsplit
+                o = urlsplit(origin)
+                allowed_hosts = {request.headers.get("host", ""), f"{request.url.hostname}:{request.url.port}",
+                                 request.url.hostname or ""}
+                if o.netloc and o.netloc not in allowed_hosts and o.hostname not in ("127.0.0.1", "localhost"):
+                    return JSONResponse(status_code=403, content={"detail": "запрос с чужого источника отклонён"})
+        return await call_next(request)
+
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception):
         log.exception("необработанная ошибка в %s", request.url.path)
@@ -200,7 +214,7 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
     def put_settings(body: dict):
         current = ctx.settings.model_dump(mode="json")
         merged = _deep_merge(current, body or {})
-        for sec, key in (("funpay", "golden_key"), ("lolz", "token")):
+        for sec, key in (("funpay", "golden_key"), ("lolz", "token"), ("telegram", "bot_token")):
             v = (merged.get(sec) or {}).get(key)
             if not v or "…" in str(v) or set(str(v)) == {"•"}:
                 merged.setdefault(sec, {})[key] = current[sec][key]
@@ -521,8 +535,14 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         buf.write("\ufeff")  # BOM, чтобы Excel открыл UTF-8 корректно
         w = csv.DictWriter(buf, fieldnames=columns, delimiter=";", extrasaction="ignore")
         w.writeheader()
+        def _safe(v):
+            # защита от формул в Excel: текст из чужих объявлений не должен начинаться с = + - @
+            if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r"):
+                return "'" + v
+            return "" if v is None else v
+
         for r in rows:
-            w.writerow({c: ("" if r.get(c) is None else r.get(c)) for c in columns})
+            w.writerow({c: _safe(r.get(c)) for c in columns})
         from fastapi.responses import Response
         return Response(content=buf.getvalue(), media_type="text/csv; charset=utf-8",
                         headers={"Content-Disposition": f'attachment; filename="{filename}"'})
