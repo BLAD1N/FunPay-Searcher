@@ -1,0 +1,98 @@
+# ============================================================================
+#  Профиль поиска: World of Tanks Blitz / Tanks Blitz — аккаунты с топами
+#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml.
+# ============================================================================
+id: wot_blitz
+name: "WoT Blitz — аккаунты с топами"
+game: wot_blitz
+region: null                     # Blitz кроссплатформенный — регион не ограничиваем
+enabled: false
+description: >-
+  Аккаунты WoT Blitz (Wargaming) и Tanks Blitz (Lesta) с техникой X уровня,
+  премами и коллаборационной техникой.
+
+sources:
+  funpay:
+    enabled: true
+    subcategory_id: null
+    subcategory_ids: []
+    game_query: "World of Tanks Blitz"   # на FunPay игра называется «World of Tanks Blitz»
+    subcategory_query: "Аккаунты"
+    server_filter: []                    # пусто — любые серверы (RU/EU/NA/ASIA)
+    extra_query: {}
+    max_items: 500
+  lolz:
+    enabled: true
+    category: wot-blitz
+    params:
+      order_by: price_to_up
+      # pmin: 1000
+      # pmax: 30000
+    pages: 3
+    max_items: 500
+
+criteria:
+  price:
+    min: 1000
+    max: 30000
+  must_any:
+    - "Все топы => все топы|все топ*|топ* танк*|топов*|топы|all tops|tier 10|tier x"
+    - "Все десятки => все 10|все десятки|десятки|десяток|все х|все x"
+    - "10 lvl => 10 lvl|10 лвл|10 уровн*|10 ур|х лвл|x lvl|х уровн*|x уровн*|level 10|lvl 10"
+    - "Премы => прем* танк*|премы|премов|прем|premium tank*"
+    - "Легендарный камуфляж => легендар* камуфляж*|легендарн* камо|legendary camo*|легендарк*"
+    - "Коллаборации => коллаб*|collab*|valkyrie|валькири*|warhammer|вархаммер|аниме|anime|gundam|гандам"
+    - "Голда => голд*|gold|золот*"
+  must_all: []
+  exclude:
+    - "бан|ban|banned|забанен*|заблокирован*"
+    - "без почты|без доступа к почте|no email"
+    - "аренда|в аренду|прокачка|буст*|boost*"
+    - "обмен|только обмен"
+  regex_any: []
+  regex_exclude:
+    - "(есть|стоит|имеется|получен|словил)\\s+бан"
+  numeric: []
+  highlights:
+    - "Chieftain => chieftain|чифтейн|чифт*"
+    - "Об. 140 => об 140|объект 140|об140|obj 140"
+    - "Об. 268 => об 268|объект 268|об268"
+    - "E 100 => е 100|е100|e-100"
+    - "ИС-7 => ис-7|ис7|ис 7|is-7|is7"
+    - "Т-62А => т-62а|т-62 а|т62а|t-62a"
+    - "60TP => 60tp|60тр|60 тп|60тп"
+    - "FV4005 => fv4005|fv 4005|бабаха"
+    - "Kranvagn => kranvagn|крана|кранваген"
+    - "Progetto => progetto|прогетто"
+    - "Maus => maus|маус"
+    - "Leopard 1 => leopard 1|leopard|леопард"
+    - "Smasher => smasher|смэшер|смешер"
+    - "Valkyrie => valkyrie|валькири*"
+    - "Warhammer => warhammer|вархаммер|предатор|predator|rhino|рино"
+    - "Легендарный камуфляж => легендар* камуфляж*|легендарн* камо|legendary camo*|легендарк*"
+    - "Голда => голд*|gold|золот*"
+  regions: []
+  min_score: 1.0
+  seller_min_reviews: null
+
+pricing:
+  mode: formula
+  formula: "price * 2 - 1000"
+  percent: 90.0
+  multiplier: 1.9
+  tiers: []
+  min_margin: 2000
+  round_to: 100
+  round_mode: nearest
+  price_ending: null
+
+lot_template:
+  funpay_subcategory_id: null
+  title_ru: ""
+  title_en: ""
+  description_ru: ""
+  description_en: ""
+  amount: 1
+  deactivate_after_sale: true
+  active: true
+  fields: {}

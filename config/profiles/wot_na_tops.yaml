@@ -1,0 +1,108 @@
+# ============================================================================
+#  Профиль поиска: World of Tanks (Wargaming, NA) — топовые аккаунты
+#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml.
+# ============================================================================
+id: wot_na_tops
+name: "WoT (NA) — топовые аккаунты"
+game: wot
+region: NA
+enabled: false
+description: >-
+  Аккаунты World of Tanks на североамериканском сервере с техникой X уровня
+  и наградными танками.
+
+sources:
+  funpay:
+    enabled: true
+    subcategory_id: null
+    subcategory_ids: []
+    game_query: "World of Tanks"
+    subcategory_query: "Аккаунты"
+    server_filter: ["NA", "America", "Америка", "США", "USA"]
+    extra_query: {}
+    max_items: 500
+  lolz:
+    enabled: true
+    category: world-of-tanks
+    params:
+      order_by: price_to_up
+      # region: na                   # имя параметра проверьте в UI -> «Lolz» -> «Параметры»
+    pages: 3
+    max_items: 500
+
+criteria:
+  price:
+    min: 3000
+    max: 60000
+  must_any:
+    - "Все топы => все топы|все топ*|топ* танк*|топов*|топы|all tops|all tier 10|tier 10|tier x|t10"
+    - "Все десятки => все 10|все десятки|десятки|десяток|все х|все x"
+    - "10 lvl => 10 lvl|10 лвл|10 уровн*|10 ур|х лвл|x lvl|х уровн*|x уровн*|level 10|lvl 10"
+    - "Chieftain => чифтейн|chieftain|чифт*"
+    - "Об. 279 (р) => об 279|объект 279|об279|279 р|279р|obj 279|object 279"
+    - "Об. 260 => об 260|объект 260|об260|obj 260|object 260"
+    - "Премы => прем* танк*|премы|премов|прем|premium tank*|premiums"
+    - "Наградная техника => наградн* танк*|наградн* техник*|reward tank*|clan tank*"
+  must_all: []
+  exclude:
+    - "бан|ban|banned|забанен*|заблокирован*"
+    - "без почты|без доступа к почте|no email|without email"
+    - "blitz|блиц"
+    - "аренда|в аренду|прокачка|буст*|boost*|rent*"
+    - "обмен|только обмен"
+    - "lesta|леста|мир танков"
+  regex_any: []
+  regex_exclude:
+    - "(есть|стоит|имеется|получен|словил)\\s+бан"
+  numeric: []
+  highlights:
+    - "Chieftain => chieftain|чифтейн|чифт*|т95 fv4201|t95 fv4201"
+    - "Об. 279 (р) => об 279|объект 279|об279|279 р|279р|obj 279|object 279"
+    - "Об. 260 => об 260|объект 260|об260|obj 260|object 260"
+    - "Об. 907 => об 907|объект 907|об907|obj 907"
+    - "Об. 140 => об 140|объект 140|об140|obj 140"
+    - "E 100 => е 100|е100|e-100"
+    - "E 50 M => е 50 м|е50м|e 50m|e50 m"
+    - "ИС-7 => ис-7|ис7|ис 7|is-7|is7"
+    - "60TP => 60tp|60тр|60 тп|60тп"
+    - "Strv 103B => strv|стрв|strv 103|103b"
+    - "Kranvagn => kranvagn|крана|кранваген|кран"
+    - "Super Conqueror => super conqueror|супер конь|суперконь|s conq"
+    - "WT E 100 => wt e 100|wt e100|вафля|waffentrager|ваффентрагер"
+    - "Type 5 => type 5|тайп 5"
+    - "Maus => maus|маус"
+    - "Leopard 1 => leopard 1|leopard|леопард"
+    - "FV4005 => fv4005|fv 4005|бабаха"
+    - "Bourrasque => bourrasque|бурраск|бураск*"
+    - "BZ-176 => bz-176|bz176|бз-176|бз 176"
+    - "Skorpion G => skorpion|скорпион"
+    - "Progetto => progetto|прогетто"
+    - "Löwe => lowe|löwe|лев|лёва|лева"
+    - "Голда => голд*|gold|золот*"
+  regions: ["NA"]
+  min_score: 1.0
+  seller_min_reviews: null
+
+pricing:
+  mode: formula
+  formula: "price * 2 - 1000"
+  percent: 90.0
+  multiplier: 1.9
+  tiers: []
+  min_margin: 2000
+  round_to: 100
+  round_mode: nearest
+  price_ending: null
+
+lot_template:
+  funpay_subcategory_id: null
+  title_ru: ""
+  title_en: ""
+  description_ru: ""
+  description_en: ""
+  amount: 1
+  deactivate_after_sale: true
+  active: true
+  fields: {}
+  # fields:
+  #   server: "NA"

@@ -1,0 +1,108 @@
+# ============================================================================
+#  Профиль поиска: Fortnite — аккаунты с редкими скинами
+#  Подробные комментарии к каждому полю — в wot_ru_tops.yaml.
+# ============================================================================
+id: fortnite_skins
+name: "Fortnite — редкие скины (OG)"
+game: fortnite
+region: null
+enabled: false
+description: >-
+  Аккаунты Fortnite с редкими/OG скинами: Renegade Raider, Black Knight,
+  Galaxy, IKONIK, Wonder, Minty и т.п.
+
+sources:
+  funpay:
+    enabled: true
+    subcategory_id: null
+    subcategory_ids: []
+    game_query: "Fortnite"
+    subcategory_query: "Аккаунты"
+    server_filter: []
+    extra_query: {}
+    max_items: 500
+  lolz:
+    enabled: true
+    category: fortnite
+    # Имена параметров проверьте в UI -> «Lolz» -> «Параметры» (категория fortnite).
+    params:
+      order_by: price_to_up
+      # skin[]: ["Renegade Raider"]  # фильтр по скинам (пример; проверьте имя параметра)
+      # vbucks_min: 1000
+      # pmin: 1000
+      # pmax: 40000
+    pages: 3
+    max_items: 500
+
+criteria:
+  price:
+    min: 1000
+    max: 40000
+  must_any:
+    - "Скины => скин*|skin*"
+    - "Renegade Raider => renegade*|ренегат*|ренегейд*"
+    - "Black Knight => black knight|черн* рыцар*|блэк найт"
+    - "Galaxy => galaxy|галакси|гэлакси"
+    - "IKONIK => ikonik|иконик"
+    - "OG => og|ог|олд*|old school|с 1 сезон*|1 сезон|season 1|season 2|2 сезон*"
+    - "Wonder => wonder|вандер"
+    - "Minty => minty|минти"
+    - "Reflex => reflex|рефлекс"
+    - "Honor Guard => honor guard|хонор гард"
+    - "Редкие скины => редк*|rare|раритет*|эксклюзив*|exclusive"
+    - "V-Bucks => в-баксы|vbucks|v-bucks|вбаксы|в баксы"
+  must_all: []
+  exclude:
+    - "бан|ban|banned|забанен*|заблокирован*"
+    - "без почты|без доступа к почте|no email|без доступа к epic"
+    - "аренда|в аренду|прокачка|буст*|boost*"
+    - "обмен|только обмен"
+    - "cheat*|чит*"                 # аккаунты с читами — риск бана
+  regex_any: []
+  regex_exclude:
+    - "(есть|стоит|имеется|получен|словил)\\s+бан"
+  numeric: []
+  # numeric:
+  #   - {field: skins_count, min: 30}
+  highlights:
+    - "Renegade Raider => renegade*|ренегат*|ренегейд*"
+    - "Black Knight => black knight|черн* рыцар*|блэк найт"
+    - "Galaxy => galaxy|галакси|гэлакси"
+    - "IKONIK => ikonik|иконик"
+    - "Wonder => wonder|вандер"
+    - "Minty => minty|минти"
+    - "Reflex => reflex|рефлекс"
+    - "Honor Guard => honor guard|хонор гард"
+    - "Aerial Assault Trooper => aerial assault|аэриал"
+    - "Recon Expert => recon expert|рекон"
+    - "Glow => glow|глоу"
+    - "Double Helix => double helix|дабл хеликс"
+    - "OG => og|ог|old school|с 1 сезон*|season 1"
+    - "V-Bucks => в-баксы|vbucks|v-bucks|вбаксы|в баксы"
+    - "Save the World => save the world|ств|stw|спасти мир"
+    - "Родная почта => родная почта|native mail|полный доступ|full access"
+  regions: []
+  min_score: 1.0
+  seller_min_reviews: null
+
+pricing:
+  mode: formula
+  formula: "price * 2 - 1000"
+  percent: 90.0
+  multiplier: 1.9
+  tiers: []
+  min_margin: 2000
+  round_to: 100
+  round_mode: nearest
+  price_ending: null
+
+lot_template:
+  funpay_subcategory_id: null
+  title_ru: ""
+  title_en: ""
+  description_ru: ""
+  description_en: ""
+  amount: 1
+  deactivate_after_sale: true
+  active: true
+  fields: {}

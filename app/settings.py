@@ -37,6 +37,18 @@ class MonitorSettings(BaseModel):
     interval_minutes: int = 30           # как часто проверять доступность исходных объявлений
     auto_deactivate: bool = True         # снимать наш лот, если исходник продан/исчез
     auto_search_minutes: int = 0         # 0 — автопоиск по расписанию выключен
+    orders_check_minutes: int = 5        # как часто проверять новые заказы (продажи) на FunPay; 0 — выключено
+    auto_raise_hours: float = 4.0        # автоподнятие наших лотов на FunPay раз в N часов; 0 — выключено
+
+
+class TelegramSettings(BaseModel):
+    enabled: bool = False
+    bot_token: str = ""                  # токен бота от @BotFather
+    chat_id: str = ""                    # ваш chat_id (узнать у @userinfobot) или id канала/группы
+    notify_new_candidates: bool = True   # новые подходящие аккаунты после поиска
+    notify_source_sold: bool = True      # исходник продан/снят — наш лот деактивирован
+    notify_new_orders: bool = True       # новый заказ (продажа) нашего лота на FunPay
+    notify_errors: bool = True           # ошибки авторизации/публикации
 
 
 class UISettings(BaseModel):
@@ -50,6 +62,7 @@ class Settings(BaseModel):
     funpay: FunPaySettings = Field(default_factory=FunPaySettings)
     lolz: LolzSettings = Field(default_factory=LolzSettings)
     monitor: MonitorSettings = Field(default_factory=MonitorSettings)
+    telegram: TelegramSettings = Field(default_factory=TelegramSettings)
     ui: UISettings = Field(default_factory=UISettings)
     default_currency: str = "RUB"
 
@@ -69,6 +82,8 @@ class Settings(BaseModel):
             s.funpay.golden_key = os.environ["FUNPAY_GOLDEN_KEY"]
         if os.getenv("LOLZ_TOKEN"):
             s.lolz.token = os.environ["LOLZ_TOKEN"]
+        if os.getenv("TELEGRAM_BOT_TOKEN"):
+            s.telegram.bot_token = os.environ["TELEGRAM_BOT_TOKEN"]
         return s
 
     def save(self, path: Path = SETTINGS_FILE) -> None:
@@ -79,7 +94,7 @@ class Settings(BaseModel):
     def masked(self) -> dict:
         """Для отдачи в UI: секреты маскируются."""
         d = self.model_dump(mode="json")
-        for sec, key in (("funpay", "golden_key"), ("lolz", "token")):
+        for sec, key in (("funpay", "golden_key"), ("lolz", "token"), ("telegram", "bot_token")):
             v = d[sec].get(key) or ""
             d[sec][key + "_set"] = bool(v)
             d[sec][key] = (v[:4] + "…" + v[-4:]) if len(v) > 12 else ("•" * len(v))

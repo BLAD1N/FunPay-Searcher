@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Optional
 
-from .models import Found, FoundStatus, Listing, LotStatus, MatchResult, OurLot, utcnow
+from .models import Found, FoundStatus, Listing, LotStatus, MatchResult, Order, OrderStatus, OurLot, utcnow
 from .settings import DATA_DIR
 
 DB_FILE = DATA_DIR / "searcher.db"
@@ -47,6 +47,15 @@ CREATE TABLE IF NOT EXISTS lots (
     source_available INTEGER, source_checked_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_lots_status ON lots(status);
+
+CREATE TABLE IF NOT EXISTS orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    funpay_order_id TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL, title TEXT, subcategory_name TEXT, price REAL NOT NULL, currency TEXT,
+    buyer_name TEXT, buyer_id TEXT, buyer_url TEXT, order_url TEXT, order_date TEXT,
+    lot_id INTEGER, source_url TEXT, source_price REAL,
+    first_seen TEXT NOT NULL, updated_at TEXT NOT NULL, notified INTEGER DEFAULT 0, note TEXT DEFAULT ''
+);
 
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -233,6 +242,69 @@ class Storage:
     def delete_lot(self, lot_id: int) -> None:
         with self._lock:
             self._conn.execute("DELETE FROM lots WHERE id=?", (lot_id,))
+            self._conn.commit()
+
+    # ----------------------------------------------------------- orders
+    def _row_to_order(self, r: sqlite3.Row) -> Order:
+        return Order(
+            id=r["id"], funpay_order_id=r["funpay_order_id"], status=OrderStatus(r["status"]), title=r["title"] or "",
+            subcategory_name=r["subcategory_name"], price=r["price"], currency=r["currency"] or "RUB",
+            buyer_name=r["buyer_name"], buyer_id=r["buyer_id"], buyer_url=r["buyer_url"], order_url=r["order_url"] or "",
+            order_date=_pdt(r["order_date"]), lot_id=r["lot_id"], source_url=r["source_url"],
+            source_price=r["source_price"], first_seen=_pdt(r["first_seen"]), updated_at=_pdt(r["updated_at"]),
+            notified=bool(r["notified"]), note=r["note"] or "",
+        )
+
+    def upsert_order(self, order: Order) -> tuple[Order, bool]:
+        """Вставить/обновить заказ по funpay_order_id. Возвращает (заказ, is_new)."""
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM orders WHERE funpay_order_id=?", (order.funpay_order_id,)).fetchone()
+            now = utcnow()
+            if row:
+                self._conn.execute(
+                    """UPDATE orders SET status=?, title=?, subcategory_name=?, price=?, currency=?, buyer_name=?, buyer_id=?,
+                       buyer_url=?, order_url=?, order_date=?, lot_id=COALESCE(?, lot_id), source_url=COALESCE(?, source_url),
+                       source_price=COALESCE(?, source_price), updated_at=? WHERE id=?""",
+                    (order.status.value, order.title, order.subcategory_name, order.price, order.currency,
+                     order.buyer_name, order.buyer_id, order.buyer_url, order.order_url, _dt(order.order_date),
+                     order.lot_id, order.source_url, order.source_price, _dt(now), row["id"]))
+                self._conn.commit()
+                return self.get_order(row["id"]), False
+            cur = self._conn.execute(
+                """INSERT INTO orders (funpay_order_id, status, title, subcategory_name, price, currency, buyer_name, buyer_id,
+                   buyer_url, order_url, order_date, lot_id, source_url, source_price, first_seen, updated_at, notified, note)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (order.funpay_order_id, order.status.value, order.title, order.subcategory_name, order.price,
+                 order.currency, order.buyer_name, order.buyer_id, order.buyer_url, order.order_url,
+                 _dt(order.order_date), order.lot_id, order.source_url, order.source_price, _dt(now), _dt(now),
+                 int(order.notified), order.note))
+            self._conn.commit()
+            return self.get_order(cur.lastrowid), True
+
+    def get_order(self, order_id: int) -> Optional[Order]:
+        with self._lock:
+            r = self._conn.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
+            return self._row_to_order(r) if r else None
+
+    def list_orders(self, status: Optional[Iterable[str]] = None, limit: int = 500) -> list[Order]:
+        q = "SELECT * FROM orders WHERE 1=1"
+        args: list = []
+        if status:
+            st = list(status)
+            q += f" AND status IN ({','.join('?' * len(st))})"; args.extend(st)
+        q += " ORDER BY COALESCE(order_date, first_seen) DESC LIMIT ?"; args.append(limit)
+        with self._lock:
+            return [self._row_to_order(r) for r in self._conn.execute(q, args).fetchall()]
+
+    def set_order_fields(self, order_id: int, **fields) -> None:
+        allowed = {"notified", "note", "lot_id", "source_url", "source_price", "status"}
+        items = [(k, v) for k, v in fields.items() if k in allowed]
+        if not items:
+            return
+        with self._lock:
+            sets = ", ".join(f"{k}=?" for k, _ in items)
+            vals = [(v.value if isinstance(v, OrderStatus) else (int(v) if isinstance(v, bool) else v)) for _, v in items]
+            self._conn.execute(f"UPDATE orders SET {sets}, updated_at=? WHERE id=?", (*vals, _dt(utcnow()), order_id))
             self._conn.commit()
 
     # ----------------------------------------------------------- events

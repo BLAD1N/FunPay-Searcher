@@ -8,7 +8,7 @@ from typing import Any, Optional
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import __version__
 from .models import Criteria, Found, FoundStatus, Listing, LotStatus, MatchResult, OurLot, PricingRule, Profile
@@ -21,6 +21,28 @@ from .settings import Settings
 
 STATIC_DIR = Path(__file__).resolve().parent / "web" / "static"
 log = logging.getLogger("app")
+
+
+# Модели тел запросов объявлены на уровне модуля: при `from __future__ import annotations`
+# FastAPI не может разрешить аннотации на локальные классы внутри create_app().
+class SearchBody(BaseModel):
+    profile_ids: Optional[list[str]] = None
+    sources: Optional[list[str]] = None
+
+
+class PricingPreview(BaseModel):
+    price: float
+    pricing: PricingRule
+
+
+class MatchingTest(BaseModel):
+    profile: Optional[Profile] = None
+    profile_id: Optional[str] = None
+    criteria: Optional[Criteria] = None
+    text: str = ""
+    price: float = 0
+    region: Optional[str] = None
+    attributes: dict[str, Any] = Field(default_factory=dict)
 
 
 def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> FastAPI:
@@ -153,6 +175,8 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
             raise HTTPException(409, "профиль с таким id уже существует")
         except KeyError:
             pass
+        except ValueError as e:
+            raise HTTPException(400, str(e))
         try:
             ctx.profiles.save(profile)
         except ValueError as e:
@@ -200,10 +224,6 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
         return copy.model_dump(mode="json")
 
     # ------------------------------------------------------------- search
-    class SearchBody(BaseModel):
-        profile_ids: Optional[list[str]] = None
-        sources: Optional[list[str]] = None
-
     @app.post("/api/search")
     def start_search(body: Optional[SearchBody] = None):
         body = body or SearchBody()
@@ -395,25 +415,12 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
     def events(limit: int = Query(200, le=2000)):
         return ctx.storage.events(limit)
 
-    class PricingPreview(BaseModel):
-        price: float
-        pricing: PricingRule
-
     @app.post("/api/pricing/preview")
     def pricing_preview(body: PricingPreview):
         try:
             return {"price": calculate_price(body.price, body.pricing)}
         except Exception as e:  # noqa: BLE001
             raise HTTPException(400, f"ошибка формулы: {e}")
-
-    class MatchingTest(BaseModel):
-        profile: Optional[Profile] = None
-        profile_id: Optional[str] = None
-        criteria: Optional[Criteria] = None
-        text: str = ""
-        price: float = 0
-        region: Optional[str] = None
-        attributes: dict[str, Any] = {}
 
     @app.post("/api/matching/test")
     def matching_test(body: MatchingTest):

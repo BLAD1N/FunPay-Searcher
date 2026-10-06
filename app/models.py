@@ -222,6 +222,36 @@ class OurLot(BaseModel):
     source_checked_at: Optional[datetime] = None
 
 
+class OrderStatus(str, Enum):
+    PAID = "paid"          # оплачен, ждёт выполнения
+    CLOSED = "closed"      # закрыт (выполнен)
+    REFUNDED = "refunded"  # возврат
+
+
+class Order(BaseModel):
+    """Заказ (продажа) на FunPay по нашему лоту."""
+
+    id: Optional[int] = None
+    funpay_order_id: str
+    status: OrderStatus = OrderStatus.PAID
+    title: str = ""
+    subcategory_name: Optional[str] = None
+    price: float = 0.0
+    currency: str = "RUB"
+    buyer_name: Optional[str] = None
+    buyer_id: Optional[str] = None
+    buyer_url: Optional[str] = None
+    order_url: str = ""
+    order_date: Optional[datetime] = None
+    lot_id: Optional[int] = None          # наш лот (если удалось сопоставить)
+    source_url: Optional[str] = None      # где купить исходник
+    source_price: Optional[float] = None
+    first_seen: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+    notified: bool = False
+    note: str = ""
+
+
 class SearchRunStats(BaseModel):
     profile_id: str
     source: str
