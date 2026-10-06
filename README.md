@@ -81,8 +81,9 @@ python -m app --port 8787 --no-browser
 
 ## Сборка в один exe (Windows)
 
-Запустите `build_exe.bat` — появится `dist\FunPaySearcher.exe`. Положите его в отдельную папку:
-при первом запуске рядом создадутся `config\` (настройки и профили) и `data\` (база, лог).
+Запустите `build_exe.bat` — появится `dist\FunPaySearcher.exe` (на Linux/macOS — `./build_exe.sh`, результат `dist/FunPaySearcher`).
+Положите его в отдельную папку: при первом запуске рядом создадутся `config\` (настройки и профили) и `data\` (база, лог).
+Параметры сборки и решение проблем (антивирус, «Add Python to PATH», занятый порт) — в [docs/BUILD.md](docs/BUILD.md).
 
 ## Подробнее о настройке критериев
 

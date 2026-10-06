@@ -28,6 +28,21 @@ def main() -> None:
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
         handlers=[logging.StreamHandler(), logging.FileHandler(DATA_DIR / "app.log", encoding="utf-8")],
     )
+    # заранее проверяем порт: иначе баннер «запущен» и браузер откроются, а сервер упадёт
+    import socket
+    import sys
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            if sys.platform != "win32":
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # TIME_WAIT не считаем занятым
+            sock.bind((host, port))
+    except OSError as e:
+        print(f"\n  [!] Порт {port} занят ({e}). Возможно, программа уже запущена.\n"
+              f"      Запустите с другим портом (--port {port + 1}) или измените ui.port в config/settings.yaml.\n")
+        if getattr(sys, "frozen", False):
+            input("  Нажмите Enter, чтобы закрыть окно...")
+        sys.exit(3)
+
     url = f"http://{host}:{port}/"
     print(f"\n  FunPay Searcher запущен: {url}\n  (Ctrl+C — остановить)\n")
     if settings.ui.open_browser and not args.no_browser:
