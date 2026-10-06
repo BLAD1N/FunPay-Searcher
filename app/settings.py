@@ -62,6 +62,8 @@ class MonitorSettings(BaseModel):
     auto_search_minutes: int = 0         # 0 — автопоиск по расписанию выключен
     orders_check_minutes: int = 5        # как часто проверять новые заказы (продажи) на FunPay; 0 — выключено
     auto_raise_hours: float = 4.0        # автоподнятие наших лотов на FunPay раз в N часов; 0 — выключено
+    auto_reprice: bool = True            # пересчитывать цену нашего лота, если цена исходника изменилась
+    reprice_min_change_percent: float = 3.0  # игнорировать изменения цены исходника меньше N%
 
 
 class TelegramSettings(BaseModel):
@@ -72,6 +74,20 @@ class TelegramSettings(BaseModel):
     notify_source_sold: bool = True      # исходник продан/снят — наш лот деактивирован
     notify_new_orders: bool = True       # новый заказ (продажа) нашего лота на FunPay
     notify_errors: bool = True           # ошибки авторизации/публикации
+    notify_price_changes: bool = True    # изменилась цена исходника / наш лот переоценён
+    notify_messages: bool = True         # новые сообщения покупателей в чате FunPay
+
+
+class AutoReplySettings(BaseModel):
+    """Автоответчик в чате FunPay (покупатели пишут перед покупкой)."""
+
+    enabled: bool = False
+    poll_seconds: int = 15               # как часто опрашивать новые сообщения
+    reply_once_per_chat_hours: float = 12.0  # не отвечать повторно в том же чате чаще, чем раз в N часов
+    greeting: str = ("Здравствуйте! Аккаунт в наличии ✅ Отвечу на любые вопросы в течение нескольких минут. "
+                     "Передача сразу после оплаты, с полным доступом и сменой данных.")
+    keywords: dict[str, str] = Field(default_factory=dict)  # {"в наличии|есть?": "Да, в наличии ✅", ...}
+    ignore_if_online_minutes: int = 0    # 0 — отвечать всегда; N — не отвечать, если сами были онлайн N минут назад
 
 
 class UISettings(BaseModel):
@@ -86,6 +102,7 @@ class Settings(BaseModel):
     lolz: LolzSettings = Field(default_factory=LolzSettings)
     monitor: MonitorSettings = Field(default_factory=MonitorSettings)
     telegram: TelegramSettings = Field(default_factory=TelegramSettings)
+    autoreply: AutoReplySettings = Field(default_factory=AutoReplySettings)
     ui: UISettings = Field(default_factory=UISettings)
     default_currency: str = "RUB"
 
