@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Сообщения — FunPay</title>
+</head>
+<body data-app-data="{&quot;locale&quot;:&quot;ru&quot;,&quot;csrf-token&quot;:&quot;csrf-token-test-123&quot;,&quot;userId&quot;:777001,&quot;webpush&quot;:{&quot;app&quot;:&quot;x&quot;,&quot;enabled&quot;:false}}">
+<header class="navbar">
+  <div class="user-link-dropdown">
+    <a href="https://funpay.com/users/777001/" class="user-link-dropdown-toggle">
+      <div class="user-link-name">TestSeller</div>
+    </a>
+  </div>
+</header>
+<div class="chat-full">
+  <div class="chat-contacts">
+    <div class="contact-list custom-scroll">
+      <a href="https://funpay.com/chat/?node=5001001" class="contact-item unread" data-id="5001001" data-node-msg="910004" data-user-msg="910003">
+        <div class="contact-item-photo"><div class="avatar-photo" style="background-image: url(/img/layout/avatar.png);"></div></div>
+        <div class="contact-item-info">
+          <div class="media-user-name">Buyer_One</div>
+          <div class="contact-item-message">Здравствуйте, аккаунт ещё в наличии?</div>
+          <div class="contact-item-time">12:34</div>
+        </div>
+      </a>
+      <a href="https://funpay.com/chat/?node=5001002" class="contact-item" data-id="5001002" data-node-msg="910010" data-user-msg="910010">
+        <div class="contact-item-photo"><div class="avatar-photo" style="background-image: url(/img/layout/avatar.png);"></div></div>
+        <div class="contact-item-info">
+          <div class="media-user-name">EuroTrader</div>
+          <div class="contact-item-message">Спасибо, всё получил 👍</div>
+          <div class="contact-item-time">вчера</div>
+        </div>
+      </a>
+      <a href="/chat/?node=5001003" class="contact-item" data-id="5001003">
+        <div class="contact-item-photo"><div class="avatar-photo" style="background-image: url(/img/layout/avatar.png);"></div></div>
+        <div class="contact-item-info">
+          <div class="media-user-name">na_dealer</div>
+          <div class="contact-item-message">Какой сервер?</div>
+          <div class="contact-item-time">1 окт</div>
+        </div>
+      </a>
+      <!-- сломанный элемент без корректного data-id — должен быть пропущен -->
+      <a href="https://funpay.com/chat/?node=x" class="contact-item" data-id="not-a-number">
+        <div class="contact-item-info">
+          <div class="media-user-name">Broken</div>
+          <div class="contact-item-message">???</div>
+        </div>
+      </a>
+    </div>
+  </div>
+  <div class="chat-detail">
+    <div class="chat-not-selected">Выберите чат</div>
+  </div>
+</div>
+</body>
+</html>

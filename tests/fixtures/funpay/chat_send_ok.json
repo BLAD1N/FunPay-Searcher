@@ -1,0 +1,21 @@
+{
+  "response": {"error": null},
+  "objects": [
+    {
+      "type": "chat_node",
+      "id": 5001001,
+      "tag": "00000000",
+      "data": {
+        "node": {"id": 5001001, "name": "users-777001-5001", "silent": false},
+        "messages": [
+          {
+            "id": 910006,
+            "author": 777001,
+            "html": "<div class=\"chat-msg-item\" id=\"message-910006\"><div class=\"chat-message\"><div class=\"media-user-name\"><a href=\"https://funpay.com/users/777001/\">TestSeller</a></div><div class=\"message-text\">Здравствуйте! Аккаунт в наличии ✅</div><div class=\"chat-msg-date\" title=\"06.10.2026 12:45:00\">12:45</div></div></div>"
+          }
+        ],
+        "hasHistory": true
+      }
+    }
+  ]
+}

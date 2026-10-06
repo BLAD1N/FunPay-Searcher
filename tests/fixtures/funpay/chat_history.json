@@ -1,0 +1,33 @@
+{
+  "chat": {
+    "node": {"id": 5001001, "name": "users-777001-5001", "silent": false},
+    "messages": [
+      {
+        "id": 910000,
+        "author": 0,
+        "html": "<div class=\"chat-msg-item\" id=\"message-910000\"><div class=\"chat-message\"><div class=\"media-user-name\"><a href=\"https://funpay.com/\">FunPay</a></div><div class=\"alert alert-with-icon alert-info\">Покупатель <a href=\"https://funpay.com/users/5001/\">Buyer_One</a> оплатил заказ <a href=\"https://funpay.com/orders/ABC12345/\">#ABC12345</a>. Подтвердите выполнение.</div><div class=\"chat-msg-date\" title=\"05.10.2026 18:00:00\">вчера</div></div></div>"
+      },
+      {
+        "id": 910001,
+        "author": 5001,
+        "html": "<div class=\"chat-msg-item\" id=\"message-910001\"><div class=\"chat-message\"><div class=\"media-user-name\"><a href=\"https://funpay.com/users/5001/\" class=\"chat-msg-author-link\">Buyer_One</a></div><div class=\"message-text\">Привет! Аккаунт в наличии?</div><div class=\"chat-msg-date\" title=\"06.10.2026 12:30:00\">12:30</div></div></div>"
+      },
+      {
+        "id": 910002,
+        "author": 5001,
+        "html": "<div class=\"chat-msg-item\" id=\"message-910002\"><div class=\"chat-message\"><div class=\"chat-img-wrapper\"><a href=\"https://funpay.com/uploads/chat/123.png\" class=\"chat-img-link\" target=\"_blank\"><img src=\"https://funpay.com/uploads/chat/123_small.png\"></a></div><div class=\"chat-msg-date\" title=\"06.10.2026 12:31:00\">12:31</div></div></div>"
+      },
+      {
+        "id": 910003,
+        "author": 777001,
+        "html": "<div class=\"chat-msg-item\" id=\"message-910003\"><div class=\"chat-message\"><div class=\"media-user-name\"><a href=\"https://funpay.com/users/777001/\" class=\"chat-msg-author-link\">TestSeller</a></div><div class=\"message-text\">⁤Да, в наличии ✅</div><div class=\"chat-msg-date\" title=\"06.10.2026 12:32:00\">12:32</div></div></div>"
+      },
+      {
+        "id": 910004,
+        "author": 5001,
+        "html": "<div class=\"chat-msg-item\" id=\"message-910004\"><div class=\"chat-message\"><div class=\"message-text\">Здравствуйте, аккаунт ещё в наличии?</div><div class=\"chat-msg-date\" title=\"06.10.2026 12:34:00\">12:34</div></div></div>"
+      }
+    ],
+    "hasHistory": true
+  }
+}

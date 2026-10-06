@@ -1,0 +1,21 @@
+{
+  "objects": [
+    {
+      "type": "orders_counters",
+      "id": 777001,
+      "tag": "tag-orders-2",
+      "data": {"buyer": 0, "seller": 2}
+    },
+    {
+      "type": "chat_bookmarks",
+      "id": 777001,
+      "tag": "tag-chats-2",
+      "data": {
+        "counter": 1,
+        "html": "<a href=\"https://funpay.com/chat/?node=5001001\" class=\"contact-item unread\" data-id=\"5001001\" data-node-msg=\"910005\" data-user-msg=\"910003\"><div class=\"contact-item-photo\"><div class=\"avatar-photo\"></div></div><div class=\"contact-item-info\"><div class=\"media-user-name\">Buyer_One</div><div class=\"contact-item-message\">Беру, как оплатить?</div><div class=\"contact-item-time\">12:40</div></div></a><a href=\"https://funpay.com/chat/?node=5001004\" class=\"contact-item\" data-id=\"5001004\" data-node-msg=\"910020\" data-user-msg=\"910020\"><div class=\"contact-item-info\"><div class=\"media-user-name\">NewGuy</div><div class=\"contact-item-message\">ок</div><div class=\"contact-item-time\">12:41</div></div></a>",
+        "order": "5001001,5001004,5001002,5001003"
+      }
+    }
+  ],
+  "response": false
+}

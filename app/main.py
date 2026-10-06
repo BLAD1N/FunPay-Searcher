@@ -665,6 +665,38 @@ def create_app(ctx: Optional[AppContext] = None, start_monitor: bool = True) -> 
             raise HTTPException(501, "автоответчик недоступен")
         return {"reply": autoreply.preview_reply(str(body.get("text", "")))}
 
+    # --------------------------------------------------------------- chat
+    def _chat():
+        _require_funpay()
+        from .sources.funpay_chat import FunPayChat
+        return FunPayChat(ctx.funpay)
+
+    @app.get("/api/chat")
+    def chat_list():
+        try:
+            return _chat().list_chats()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(502, f"FunPay: {e}")
+
+    @app.get("/api/chat/{chat_id}/history")
+    def chat_history(chat_id: int):
+        try:
+            return _chat().get_history(chat_id)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(502, f"FunPay: {e}")
+
+    @app.post("/api/chat/{chat_id}/send")
+    def chat_send(chat_id: int, body: dict):
+        text = str((body or {}).get("text", "")).strip()
+        if not text:
+            raise HTTPException(400, "пустое сообщение")
+        try:
+            _chat().send_message(chat_id, text)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(502, f"FunPay: {e}")
+        ctx.log("chat", f"отправлено сообщение в чат {chat_id}: {text[:60]}")
+        return {"ok": True}
+
     # ----------------------------------------------------------- utilities
     @app.get("/api/events")
     def events(limit: int = Query(200, le=2000)):

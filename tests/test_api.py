@@ -253,3 +253,32 @@ def test_csv_export_neutralises_formulas(client):
                                                           title="=HYPERLINK(\"http://evil\")", seller_name="+cmd")))
     body = client.get("/api/export/found.csv").content.decode("utf-8-sig")
     assert "'=HYPERLINK" in body and "'+cmd" in body
+
+
+def test_chat_endpoints_and_autoreply_preview(client, monkeypatch):
+    import app.sources.funpay_chat as fc
+
+    class FakeChat:
+        def __init__(self, source):
+            self.sent = []
+
+        def list_chats(self):
+            return [{"chat_id": 1, "name": "buyer", "last_text": "в наличии?", "unread": True}]
+
+        def get_history(self, chat_id, last_message_id=None):
+            return [{"id": 5, "author": "buyer", "text": "в наличии?", "is_mine": False}]
+
+        def send_message(self, chat_id, text):
+            FakeChat.last = (chat_id, text)
+            return True
+
+    monkeypatch.setattr(fc, "FunPayChat", FakeChat)
+    assert client.get("/api/chat").json()[0]["unread"] is True
+    assert client.get("/api/chat/1/history").json()[0]["text"] == "в наличии?"
+    assert client.post("/api/chat/1/send", json={"text": "Да ✅"}).json()["ok"] is True
+    assert FakeChat.last == (1, "Да ✅")
+    assert client.post("/api/chat/1/send", json={"text": "  "}).status_code == 400
+    client.ctx.settings.autoreply.keywords = {"в наличии|есть?": "Да, в наличии ✅"}
+    r = client.post("/api/autoreply/preview", json={"text": "Привет, в наличии?"}).json()
+    assert r["reply"] == "Да, в наличии ✅"
+    assert "autoreply" in client.get("/api/status").json()
